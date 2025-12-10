@@ -17,13 +17,15 @@ import {
   Store,
   Bot,
   Layers,
-  CreditCard
+  CreditCard,
+  MessageCircle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Link } from "@/components/ui/link"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import { SellerSidebar } from "@/components/seller/dashboard/SellerSidebar"
+import { BuyerSidebar } from "@/components/buyer/dashboard/BuyerSidebar"
 import { DashboardTopbar } from "@/components/layout/dashboard-topbar"
 import { Badge } from "@/components/ui/badge"
 import { BrandLogo } from "@/components/visuals/BrandLogo"
@@ -52,6 +54,7 @@ const buyerNav: BuyerNavItem[] = [
   { icon: CreditCard, label: "Billing & Usage", href: "#dashboard/buyer/billing" },
   { icon: LifeBuoy, label: "Support & Guidance", href: "#dashboard/buyer/support" },
   { icon: BellRing, label: "Signals & Alerts", href: "#dashboard/buyer/signals" },
+  { icon: MessageCircle, label: "Messages", href: "#dashboard/buyer/messages" },
   { icon: Store, label: "Marketplace", href: "#marketplace" },
   { icon: Bot, label: "Prompt Generator", href: "http://localhost:8080/#prompt-generator", badge: "New", external: true },
   { icon: Settings2, label: "Settings", href: "#dashboard/settings" }
@@ -217,9 +220,11 @@ export function DashboardLayout({ children, currentPage }: DashboardLayoutProps)
     </div>
   )
 
-  // Use SellerSidebar for seller pages, otherwise use default sidebar
+  // Use SellerSidebar for seller pages, BuyerSidebar for buyer pages, otherwise use default sidebar
   const SidebarComponent = isSellerPage ? (
     <SellerSidebar />
+  ) : isBuyerPage ? (
+    <BuyerSidebar />
   ) : (
     <motion.div
       initial={{ width: 256 }}
@@ -241,7 +246,7 @@ export function DashboardLayout({ children, currentPage }: DashboardLayoutProps)
         {/* Sidebar */}
         <div className={cn(
           "fixed left-0 top-16 h-[calc(100vh-4rem)] bg-card border-r z-30",
-          isSellerPage ? "w-64" : sidebarCollapsed ? "w-16" : "w-64"
+          (isSellerPage || isBuyerPage) ? "w-64" : sidebarCollapsed ? "w-16" : "w-64"
         )}>
           {SidebarComponent}
         </div>
@@ -249,7 +254,7 @@ export function DashboardLayout({ children, currentPage }: DashboardLayoutProps)
         {/* Main Content */}
         <motion.div
           initial={{ marginLeft: 256 }}
-          animate={{ marginLeft: isSellerPage ? 256 : (sidebarCollapsed ? 64 : 256) }}
+          animate={{ marginLeft: (isSellerPage || isBuyerPage) ? 256 : (sidebarCollapsed ? 64 : 256) }}
           transition={{ duration: 0.3, ease: "easeInOut" }}
           className="flex-1 overflow-y-auto"
         >
@@ -271,7 +276,7 @@ export function DashboardLayout({ children, currentPage }: DashboardLayoutProps)
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-80">
-              {isSellerPage ? <SellerSidebar /> : <SidebarContent />}
+              {isSellerPage ? <SellerSidebar /> : isBuyerPage ? <BuyerSidebar /> : <SidebarContent />}
             </SheetContent>
           </Sheet>
         </div>
@@ -281,6 +286,7 @@ export function DashboardLayout({ children, currentPage }: DashboardLayoutProps)
           {children}
         </main>
       </div>
+
     </div>
   )
 }

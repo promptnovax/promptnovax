@@ -61,8 +61,8 @@ export function RoleGuard({
     )
   }
 
-  // If user doesn't have a role or role is not allowed (allow 'both' to pass any)
-  const roleAllowed = userRole && (userRole.role === 'both' || allowedRoles.includes(userRole.role))
+  // If user doesn't have a role or role is not allowed
+  const roleAllowed = userRole && allowedRoles.includes(userRole.role)
   if (!roleAllowed) {
     if (fallback) {
       return <>{fallback}</>

@@ -17,8 +17,8 @@ import {
   doc,
   getDocs,
   writeBatch
-} from "firebase/firestore"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
+} from "@/lib/platformStubs/firestore"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
 import { 
   Bell,
   Heart,
@@ -60,7 +60,7 @@ export function NotificationsPage() {
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - show mock data
       loadMockNotifications()
       return
@@ -69,7 +69,7 @@ export function NotificationsPage() {
     try {
       setLoading(true)
 
-      const notificationsRef = collection(firebaseDb, 'notifications')
+      const notificationsRef = collection(platformDb, 'notifications')
       const notificationsQuery = query(
         notificationsRef,
         where('recipientId', '==', currentUser.uid),
@@ -88,7 +88,7 @@ export function NotificationsPage() {
 
           try {
             const userQuery = query(
-              collection(firebaseDb, 'users'),
+              collection(platformDb, 'users'),
               where('__name__', '==', data.senderId)
             )
             const userSnapshot = await getDocs(userQuery)
@@ -198,7 +198,7 @@ export function NotificationsPage() {
 
   // Mark notification as read
   const markAsRead = async (notificationId: string) => {
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - just update local state
       setNotifications(prev => 
         prev.map(notif => 
@@ -210,7 +210,7 @@ export function NotificationsPage() {
 
     setMarkingAsRead(notificationId)
     try {
-      const notificationRef = doc(firebaseDb, 'notifications', notificationId)
+      const notificationRef = doc(platformDb, 'notifications', notificationId)
       await updateDoc(notificationRef, { read: true })
     } catch (err: any) {
       console.error('Error marking notification as read:', err)
@@ -225,7 +225,7 @@ export function NotificationsPage() {
     const unreadNotifications = notifications.filter(n => !n.read)
     if (unreadNotifications.length === 0) return
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - just update local state
       setNotifications(prev => 
         prev.map(notif => ({ ...notif, read: true }))
@@ -236,10 +236,10 @@ export function NotificationsPage() {
 
     setMarkingAllAsRead(true)
     try {
-      const batch = writeBatch(firebaseDb)
+      const batch = writeBatch(platformDb)
       
       unreadNotifications.forEach(notification => {
-        const notificationRef = doc(firebaseDb, 'notifications', notification.id)
+        const notificationRef = doc(platformDb, 'notifications', notification.id)
         batch.update(notificationRef, { read: true })
       })
       

@@ -17,15 +17,19 @@ import { BrandLogo } from "@/components/visuals/BrandLogo"
 import { useAuth } from "@/context/AuthContext"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
+import { DashboardNotifications } from "@/components/dashboard/DashboardNotifications"
 
 export function DashboardTopbar() {
-  const { currentUser, logout } = useAuth()
+  const { currentUser, logout, userRole } = useAuth()
   const { toast } = useToast()
   const [isSellerDashboard, setIsSellerDashboard] = useState(false)
+  const [isBuyerDashboard, setIsBuyerDashboard] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
 
   useEffect(() => {
     const checkRoute = () => {
       setIsSellerDashboard(window.location.hash.includes('dashboard/seller'))
+      setIsBuyerDashboard(window.location.hash.includes('dashboard/buyer'))
     }
     checkRoute()
     window.addEventListener('hashchange', checkRoute)
@@ -91,10 +95,22 @@ export function DashboardTopbar() {
           )}
 
           {/* Notifications */}
-          <Button variant="ghost" size="icon" className="relative">
+          <div className="relative">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="relative"
+              onClick={() => setNotificationsOpen(!notificationsOpen)}
+            >
             <Bell className="h-5 w-5" />
             <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary"></span>
           </Button>
+            <DashboardNotifications
+              isOpen={notificationsOpen}
+              onClose={() => setNotificationsOpen(false)}
+              userRole={isSellerDashboard ? "seller" : isBuyerDashboard ? "buyer" : undefined}
+            />
+          </div>
 
           {/* Theme toggle */}
           <ThemeToggle />

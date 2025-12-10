@@ -31,6 +31,7 @@ import { BuyerCollectionsPage } from "@/pages/dashboard/buyer/collections"
 import { BuyerBillingPage } from "@/pages/dashboard/buyer/billing"
 import { BuyerSupportPage } from "@/pages/dashboard/buyer/support"
 import { BuyerSignalsPage } from "@/pages/dashboard/buyer/signals"
+import { BuyerSettingsPage } from "@/pages/dashboard/buyer-settings"
 import { SellerDashboard } from "@/pages/dashboard/seller-dashboard"
 import { SellerUploadPage } from "@/pages/dashboard/seller-upload"
 import { SellerIntegrationsPage } from "@/pages/dashboard/seller-integrations"
@@ -50,6 +51,8 @@ import { SellerSettingsPage } from "@/pages/dashboard/seller-settings"
 import { SellerTestHistoryPage } from "@/pages/dashboard/seller-test-history"
 import { SellerTestScenariosPage } from "@/pages/dashboard/seller-test-scenarios"
 import { CreatePromptPage as DashboardCreatePromptPage } from "@/pages/dashboard/create-prompt"
+import { SellerMessagesPage } from "@/pages/dashboard/seller-messages"
+import { BuyerMessagesPage } from "@/pages/dashboard/buyer-messages"
 import { SlidesPage } from "@/pages/slides/slides"
 import { ResetPasswordPage } from "@/pages/auth/reset-password"
 import { MarketplacePage } from "@/pages/marketplace/marketplace"
@@ -91,13 +94,15 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { EnhancedHomePage } from "@/pages/home/enhanced-home"
 import { UnauthorizedPage } from "@/pages/unauthorized/unauthorized"
 import { DemoModeBanner } from "@/components/DemoModeBanner"
-import { isFirebaseConfigured } from "@/lib/firebaseClient"
+import { isSupabaseConfigured } from "@/lib/supabaseClient"
 import { TemplatesIndexPage } from "@/pages/templates/index"
+import { TemplateDetailPage } from "@/pages/templates/template-detail"
 import { ApiStudioPage } from "@/pages/studio/api"
 import { IntegrationsIndexPage } from "@/pages/integrations/index"
 import { FeaturesIndexPage } from "@/pages/features/index"
 import { FeedbackPage } from "@/pages/feedback/feedback"
 import { PromptGeneratorPage } from "@/pages/prompt-generator/prompt-generator"
+import { ViewportProvider } from "@/context/ViewportContext"
 
 type Page =
   | "home"
@@ -137,11 +142,13 @@ type Page =
   | "dashboard/buyer/billing"
   | "dashboard/buyer/support"
   | "dashboard/buyer/signals"
+  | "dashboard/buyer/messages"
   | "dashboard/seller"
   | "dashboard/seller/integrations"
   | "dashboard/seller/prompt-studio"
   | "dashboard/seller/testing"
   | "dashboard/seller/create"
+  | "dashboard/seller/messages"
   | "dashboard/create-prompt"
   | "pricing"
   | "about"
@@ -173,6 +180,7 @@ type Page =
   | "dashboard/creator"
   | "creator"
   | "templates/index"
+  | "templates"
   | "studio/api"
   | "studio/api/blueprint"
   | "studio/api/composer"
@@ -387,6 +395,16 @@ function App() {
       return <BlogDetailPage postId={postId} />
     }
 
+    // Handle templates pages
+    if (currentPage.startsWith("templates/")) {
+      if (currentPage === "templates/index") {
+        return <TemplatesIndexPage />
+      } else {
+        const templateId = currentPage.split("/")[1]
+        return <TemplateDetailPage templateId={templateId} />
+      }
+    }
+
     // Handle dashboard pages
     if (currentPage.startsWith("dashboard/")) {
       const dashboardType = currentPage.split("/")[1]
@@ -421,6 +439,12 @@ function App() {
         }
         if (subPage === "signals") {
           return <BuyerSignalsPage />
+        }
+        if (subPage === "messages") {
+          return <BuyerMessagesPage />
+        }
+        if (subPage === "settings") {
+          return <BuyerSettingsPage />
         }
         return <BuyerDashboard />
       } else if (dashboardType === "seller") {
@@ -465,6 +489,8 @@ function App() {
           return <SellerIntegrationsPage />
         } else if (subPage === "support") {
           return <SellerSupportPage />
+        } else if (subPage === "messages") {
+          return <SellerMessagesPage />
         }
         
         return <SellerDashboard />
@@ -508,6 +534,7 @@ function App() {
         return <CareersPage />
       case "docs":
         return <DocsPage />
+      case "templates":
       case "templates/index":
         return <TemplatesIndexPage />
       case "studio/api":
@@ -583,45 +610,55 @@ function App() {
 
   // Check if current page is a dashboard sub-page
     const isDashboardPage = currentPage?.startsWith("dashboard") && currentPage !== "dashboard/creator"
+    // Messages pages should render full screen without DashboardLayout padding
+    const isMessagesPage = currentPage === "dashboard/seller/messages" || currentPage === "dashboard/buyer/messages"
   
   return (
-    <ThemeProvider defaultTheme="system" storageKey="promptnovax-theme">
-      <AuthProvider>
-        <TooltipProvider>
-          <ToastProvider>
-          {!isFirebaseConfigured && <DemoModeBanner />}
-          <AnimatePresence mode="wait">
-        {currentPage === "dashboard/creator" ? (
-          <PageTransition key={currentPage}>
-            {renderPage()}
-          </PageTransition>
-        ) : isDashboardPage ? (
-          <PageTransition key={currentPage}>
-            <DashboardLayout currentPage={currentPage}>
-              {renderPage()}
-            </DashboardLayout>
-          </PageTransition>
-        ) : currentPage === "chat" ? (
-          <PageTransition key="chat">
-            <ChatPage />
-          </PageTransition>
-        ) : (
-          <PageTransition key={currentPage}>
-            <CartProvider>
-              <GuestChatProvider>
-                <Layout currentPage={currentPage}>
-                  {renderPage()}
-                </Layout>
-              </GuestChatProvider>
-            </CartProvider>
-          </PageTransition>
-        )}
-          </AnimatePresence>
-          </ToastProvider>
-          <Toaster />
-        </TooltipProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <ViewportProvider>
+      <ThemeProvider defaultTheme="system" storageKey="promptnovax-theme">
+        <AuthProvider>
+          <TooltipProvider>
+            <ToastProvider>
+              {!isSupabaseConfigured && <DemoModeBanner />}
+              <AnimatePresence mode="wait">
+                {currentPage === "dashboard/creator" ? (
+                  <PageTransition key={currentPage}>
+                    {renderPage()}
+                  </PageTransition>
+                ) : isMessagesPage ? (
+                  <PageTransition key={currentPage}>
+                    <GuestChatProvider>
+                      {renderPage()}
+                    </GuestChatProvider>
+                  </PageTransition>
+                ) : isDashboardPage ? (
+                  <PageTransition key={currentPage}>
+                    <DashboardLayout currentPage={currentPage}>
+                      {renderPage()}
+                    </DashboardLayout>
+                  </PageTransition>
+                ) : currentPage === "chat" ? (
+                  <PageTransition key="chat">
+                    <ChatPage />
+                  </PageTransition>
+                ) : (
+                  <PageTransition key={currentPage}>
+                    <CartProvider>
+                      <GuestChatProvider>
+                        <Layout currentPage={currentPage}>
+                          {renderPage()}
+                        </Layout>
+                      </GuestChatProvider>
+                    </CartProvider>
+                  </PageTransition>
+                )}
+              </AnimatePresence>
+            </ToastProvider>
+            <Toaster />
+          </TooltipProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </ViewportProvider>
   )
 }
 

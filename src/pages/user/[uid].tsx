@@ -10,9 +10,9 @@ import { useToast } from "@/hooks/use-toast"
 import { ProfileHeader } from "@/components/profile/ProfileHeader"
 import { ProfileTabs } from "@/components/profile/ProfileTabs"
 import { EditProfileModal } from "@/components/dashboard/EditProfileModal"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
 import { generateProductImage, generateProductThumbnail } from "@/lib/marketplaceImages"
-import { doc, getDoc, collection, query, where, getDocs, orderBy } from "firebase/firestore"
+import { doc, getDoc, collection, query, where, getDocs, orderBy } from "@/lib/platformStubs/firestore"
 import { 
   ArrowLeft,
   Edit,
@@ -83,7 +83,7 @@ export function UserProfilePage({ uid }: UserProfilePageProps) {
   }, [uid])
 
   const loadUserData = async () => {
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Mock data for demo mode
       loadMockData()
       return
@@ -93,7 +93,7 @@ export function UserProfilePage({ uid }: UserProfilePageProps) {
       setIsLoading(true)
 
       // Load user data
-      const userDoc = await getDoc(doc(firebaseDb, 'users', uid))
+      const userDoc = await getDoc(doc(platformDb, 'users', uid))
       if (!userDoc.exists()) {
         error("User not found", "The user profile you're looking for doesn't exist")
         return
@@ -104,7 +104,7 @@ export function UserProfilePage({ uid }: UserProfilePageProps) {
 
       // Load user's prompts
       const promptsQuery = query(
-        collection(firebaseDb, 'prompts'),
+        collection(platformDb, 'prompts'),
         where('sellerId', '==', uid),
         where('status', '==', 'active'),
         orderBy('createdAt', 'desc')
@@ -130,7 +130,7 @@ export function UserProfilePage({ uid }: UserProfilePageProps) {
       // Load followers
       if (userData.followers.length > 0) {
         const followersQuery = query(
-          collection(firebaseDb, 'users'),
+          collection(platformDb, 'users'),
           where('__name__', 'in', userData.followers.slice(0, 10)) // Limit to 10 for performance
         )
         const followersSnapshot = await getDocs(followersQuery)
@@ -144,7 +144,7 @@ export function UserProfilePage({ uid }: UserProfilePageProps) {
       // Load following
       if (userData.following.length > 0) {
         const followingQuery = query(
-          collection(firebaseDb, 'users'),
+          collection(platformDb, 'users'),
           where('__name__', 'in', userData.following.slice(0, 10)) // Limit to 10 for performance
         )
         const followingSnapshot = await getDocs(followingQuery)

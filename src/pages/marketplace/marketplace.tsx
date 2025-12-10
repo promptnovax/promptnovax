@@ -69,196 +69,6 @@ interface MarketplacePrompt {
 }
 
 type ChatMessage = {
-  id: string
-  role: "user" | "assistant"
-  content: string
-  suggestions?: MarketplacePrompt[]
-}
-
-const promptsCatalog: MarketplacePrompt[] = [
-  {
-    id: "mp-001",
-    title: "Full-Stack Feature Spec Generator",
-    headline: "Specs, architecture, and sprint plans generated from one product brief.",
-    description:
-      "Paste a product idea and instantly get technical architecture, API contracts, sprint breakdowns, and risk matrix ready for engineering hand-off.",
-    aiPlatform: "Claude",
-    category: "engineering",
-    image: "https://images.unsplash.com/photo-1523475472560-d2df97ec485c?w=1200&q=80&auto=format&fit=crop",
-    price: 39,
-    strikePrice: 79,
-    rating: 4.9,
-    reviews: 212,
-    downloads: 3211,
-    tags: ["Architecture", "Planning", "Sprints"],
-    deliverables: ["Architecture Outline", "API Contracts", "Sprint Tasks", "Risk Matrix"],
-    seller: {
-      id: "creator-claude",
-      name: "Nova Engineering",
-      avatar: "https://api.dicebear.com/7.x/initials/svg?seed=NE",
-      verified: true
-    }
-  },
-  {
-    id: "mp-002",
-    title: "Midjourney Render Studio",
-    headline: "Cinematic hero renders with 12 lighting presets for physical products.",
-    description:
-      "Generate studio-grade renders with macro detail, stylised lighting, and social-ready exports for launches and pitch decks.",
-    aiPlatform: "Midjourney",
-    category: "image",
-    image: "https://images.unsplash.com/photo-1618005198919-d3d4b5a92eee?w=1200&q=80&auto=format&fit=crop",
-    price: 24,
-    rating: 4.8,
-    reviews: 188,
-    downloads: 1890,
-    tags: ["Product", "Photography", "Branding"],
-    deliverables: ["12 Lighting Scenarios", "4 Aspect Ratios", "Render Variations"],
-    seller: {
-      id: "creator-visuals",
-      name: "Renderverse Studio",
-      avatar: "https://api.dicebear.com/7.x/initials/svg?seed=RS",
-      verified: true
-    }
-  },
-  {
-    id: "mp-003",
-    title: "Lifecycle Email Playbooks",
-    headline: "5 complete lifecycle journeys each with copy, experiments, and timing.",
-    description:
-      "Plug-and-play journeys for welcome, activation, expansion, churn save, and win-back sequences with built-in experiment ideas.",
-    aiPlatform: "ChatGPT",
-    category: "growth",
-    image: "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?w=1200&q=80&auto=format&fit=crop",
-    price: 19,
-    rating: 4.7,
-    reviews: 162,
-    downloads: 2450,
-    tags: ["Lifecycle", "Email", "Automation"],
-    deliverables: ["Copy Variations", "Timing Matrix", "Experiment Stack"],
-    seller: {
-      id: "creator-lifecycle",
-      name: "Growthcraft",
-      avatar: "https://api.dicebear.com/7.x/initials/svg?seed=GC",
-      verified: true
-    }
-  },
-  {
-    id: "mp-004",
-    title: "Creative Director Storyboard Lab",
-    headline: "Scene-by-scene voiceover, camera moves, and visual cues for Sora videos.",
-    description:
-      "Build cinematic ad campaigns with Sora-ready shot lists, visual treatments, voiceover cues, and production-ready deliverables.",
-    aiPlatform: "Sora",
-    category: "operations",
-    image: "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=1200&q=80&auto=format&fit=crop",
-    price: 49,
-    strikePrice: 89,
-    rating: 4.9,
-    reviews: 134,
-    downloads: 980,
-    tags: ["Video", "Storyboard", "Creative"],
-    deliverables: ["Scene Breakdown", "Camera Motion", "Shot List", "VO Script"],
-    seller: {
-      id: "creator-creative",
-      name: "Nova Studio Lab",
-      avatar: "https://api.dicebear.com/7.x/initials/svg?seed=NS",
-      verified: true
-    }
-  },
-  {
-    id: "mp-005",
-    title: "AI Sales Companion",
-    headline: "Discovery call summaries, objection handling, and follow-ups in one flow.",
-    description:
-      "Digest call transcripts, pull buying signals, segment decision makers, and send personalised follow-ups with tailored collateral.",
-    aiPlatform: "Gemini",
-    category: "trending",
-    image: "https://images.unsplash.com/photo-1520241434507-9516cf4b65ac?w=1200&q=80&auto=format&fit=crop",
-    price: 29,
-    rating: 4.6,
-    reviews: 201,
-    downloads: 3075,
-    tags: ["Sales", "Enablement", "Follow-up"],
-    deliverables: ["Call Summary", "Objection Map", "CTA Bank"],
-    seller: {
-      id: "creator-sales",
-      name: "Pipeline AI",
-      avatar: "https://api.dicebear.com/7.x/initials/svg?seed=PA",
-      verified: true
-    }
-  },
-  {
-    id: "mp-006",
-    title: "AI UX Research Lab",
-    headline: "Interview scripts, insight clustering, and stakeholder-ready debriefs.",
-    description:
-      "Run remote interviews with AI: includes scripts, note-taking prompts, affinity mapping, and executive-ready summaries.",
-    aiPlatform: "Claude",
-    category: "operations",
-    image: "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?w=1200&q=80&auto=format&fit=crop",
-    price: 27,
-    rating: 4.8,
-    reviews: 98,
-    downloads: 1785,
-    tags: ["Research", "Insights", "Product"],
-    deliverables: ["Interview Script", "Insight Board", "Action Matrix"],
-    seller: {
-      id: "creator-ux",
-      name: "Design Signals",
-      avatar: "https://api.dicebear.com/7.x/initials/svg?seed=DS",
-      verified: false
-    }
-  },
-  {
-    id: "mp-007",
-    title: "Chromatic Worlds Prompt Vault",
-    headline: "40 Midjourney environments crafted for cinematic world-building.",
-    description:
-      "Create mythic forests, neon megacities, lunar deserts, and arctic dawns with tuned prompt variations and moodboard references.",
-    aiPlatform: "Midjourney",
-    category: "image",
-    image: "https://images.unsplash.com/photo-1526401485004-46910ecc8e51?w=1200&q=80&auto=format&fit=crop",
-    price: 15,
-    rating: 4.7,
-    reviews: 142,
-    downloads: 2203,
-    tags: ["Environment", "Worldbuilding", "Cinematic"],
-    deliverables: ["40 Prompt Variants", "Reference Moodboard"],
-    seller: {
-      id: "creator-worlds",
-      name: "Atlas Collective",
-      avatar: "https://api.dicebear.com/7.x/initials/svg?seed=AC",
-      verified: true
-    }
-  },
-  {
-    id: "mp-008",
-    title: "Founder Press Kit Autopilot",
-    headline: "Investor decks, executive bios, and rapid media responses in minutes.",
-    description:
-      "Transform your founder story into press-ready assets including bios, FAQs, media responses, and a messaging matrix.",
-    aiPlatform: "ChatGPT",
-    category: "growth",
-    image: "https://images.unsplash.com/photo-1474631245212-32dc3c8310c6?w=1200&q=80&auto=format&fit=crop",
-    price: 22,
-    rating: 4.5,
-    reviews: 76,
-    downloads: 980,
-    tags: ["PR", "Funding", "Brand"],
-    deliverables: ["Media Kit", "Response Templates", "Messaging Matrix"],
-    seller: {
-      id: "creator-pr",
-      name: "Launch Comms",
-      avatar: "https://api.dicebear.com/7.x/initials/svg?seed=LC",
-      verified: true
-    }
-  }
-]
-
-const sections = [
-  {
-    key: "trending" as MarketplaceCategory,
     title: "Trending this week",
     description: "Highest converting prompt packs the Nova community relies on daily.",
     icon: TrendingUp
@@ -503,15 +313,15 @@ export function MarketplacePage() {
             </p>
           </div>
 
-          <div className="flex flex-col lg:flex-row justify-center gap-4">
+          <div className="flex flex-col md:flex-row justify-center gap-4 w-full">
             <Input
               placeholder="Search by use-case, industry, or keyword…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="lg:w-[420px]"
+              className="w-full md:flex-1 lg:w-[420px]"
             />
             <Select value={platform} onValueChange={(value) => setPlatform(value as AIPlatform | "All Platforms")}>
-              <SelectTrigger className="lg:w-56">
+              <SelectTrigger className="w-full sm:w-64 md:w-56">
                 <SelectValue placeholder="AI platform" />
               </SelectTrigger>
               <SelectContent>
@@ -523,7 +333,7 @@ export function MarketplacePage() {
               </SelectContent>
             </Select>
             <Select value={price} onValueChange={(value) => setPrice(value as typeof price)}>
-              <SelectTrigger className="lg:w-48">
+              <SelectTrigger className="w-full sm:w-48 md:w-40 lg:w-48">
                 <SelectValue placeholder="Pricing" />
               </SelectTrigger>
               <SelectContent>
@@ -560,7 +370,7 @@ export function MarketplacePage() {
                 </Button>
               </div>
 
-              <div className="flex gap-6 overflow-x-auto pb-2">
+              <div className="flex gap-6 overflow-x-auto pb-2 responsive-scroll">
                 {prompts.map((prompt, index) => (
                   <motion.div
                     key={prompt.id}
@@ -771,7 +581,7 @@ export function MarketplacePage() {
               </button>
             ) : (
               <>
-                <div className="flex gap-2 overflow-x-auto pb-1">
+                <div className="flex gap-2 overflow-x-auto pb-1 responsive-scroll">
                   {CHAT_QUICK_ASKS.map(ask => (
                     <button
                       key={ask}

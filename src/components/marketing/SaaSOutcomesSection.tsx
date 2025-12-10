@@ -3,7 +3,7 @@ import { CheckCircle2, Gauge, ShieldCheck, Workflow, LineChart } from "lucide-re
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import heroBg from "@/media/pnx-hero-bg.png"
-import operationalVideo from "@/../media/new.mp4"
+import nextSectionVideo from "@/../media/next section.mp4"
 
 export function SaaSOutcomesSection() {
   return (
@@ -11,7 +11,7 @@ export function SaaSOutcomesSection() {
       {/* background */}
       <div className="absolute inset-0 -z-30 bg-black" aria-hidden>
         <video
-          className="h-full w-full object-cover opacity-95 pointer-events-none"
+          className="h-full w-full object-cover opacity-95 pointer-events-none scale-[1.02]"
           autoPlay
           loop
           muted
@@ -22,11 +22,12 @@ export function SaaSOutcomesSection() {
           disablePictureInPicture
           disableRemotePlayback
           controlsList="nodownload noremoteplayback nofullscreen"
+          style={{ filter: "brightness(0.75) contrast(1.1) saturate(1.1)" }}
         >
-          <source src={operationalVideo} type="video/mp4" />
+          <source src={nextSectionVideo} type="video/mp4" />
         </video>
       </div>
-      <div className="absolute inset-0 -z-20 bg-gradient-to-b from-[#050917]/60 via-[#050917]/80 to-[#04060d]" />
+      <div className="absolute inset-0 -z-20 bg-gradient-to-b from-[#050917]/35 via-[#050917]/65 to-[#050917]/90" />
       <div className="absolute inset-0 -z-15 opacity-50 bg-[radial-gradient(circle_at_18%_12%,rgba(255,255,255,0.16),transparent_45%),radial-gradient(circle_at_82%_5%,rgba(121,134,255,0.35),transparent_55%)] mix-blend-screen" />
       <div className="absolute inset-0 -z-10 opacity-30 animate-[gradientShift_18s_ease_infinite] bg-[conic-gradient(from_240deg_at_50%_50%,rgba(88,101,242,0.2),rgba(15,23,42,0),rgba(168,85,247,0.24),rgba(15,23,42,0))]" />
 

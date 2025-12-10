@@ -24,9 +24,9 @@ import {
   FileText,
   AlertCircle
 } from "lucide-react"
-import { firebaseDb, firebaseStorage, isFirebaseConfigured } from "@/lib/firebaseClient"
-import { collection, addDoc, serverTimestamp } from "firebase/firestore"
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
+import { platformDb, platformStorage, isSupabaseConfigured } from "@/lib/platformClient"
+import { collection, addDoc, serverTimestamp } from "@/lib/platformStubs/firestore"
+import { ref, uploadBytes, getDownloadURL } from "@/lib/platformStubs/storage"
 
 interface PromptFormData {
   title: string
@@ -172,7 +172,7 @@ export function CreatePromptPage() {
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       error("Service unavailable", "Firebase is not configured. Please try again later.")
       return
     }
@@ -183,8 +183,8 @@ export function CreatePromptPage() {
       let imageUrl = ""
 
       // Upload image if provided
-      if (formData.imageFile && firebaseStorage) {
-        const imageRef = ref(firebaseStorage, `prompts/${currentUser.uid}/${Date.now()}_${formData.imageFile.name}`)
+      if (formData.imageFile && platformStorage) {
+        const imageRef = ref(platformStorage, `prompts/${currentUser.uid}/${Date.now()}_${formData.imageFile.name}`)
         const snapshot = await uploadBytes(imageRef, formData.imageFile)
         imageUrl = await getDownloadURL(snapshot.ref)
       }
@@ -206,7 +206,7 @@ export function CreatePromptPage() {
         status: "active"
       }
 
-      await addDoc(collection(firebaseDb, 'prompts'), promptData)
+      await addDoc(collection(platformDb, 'prompts'), promptData)
 
       success("Prompt Published!", "Your prompt has been successfully published to the marketplace")
       

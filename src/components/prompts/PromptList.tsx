@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { PromptCard } from "./PromptCard"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/hooks/use-toast"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
-import { collection, query, where, orderBy, limit, getDocs, onSnapshot } from "firebase/firestore"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
+import { collection, query, where, orderBy, limit, getDocs, onSnapshot } from "@/lib/platformStubs/firestore"
 import { 
   Search,
   Filter,
@@ -112,7 +112,7 @@ export function PromptList({
   }, [prompts, searchQuery, selectedCategory, selectedDifficulty, sortBy])
 
   const loadPrompts = async () => {
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Mock data for demo mode
       loadMockData()
       return
@@ -122,7 +122,7 @@ export function PromptList({
       setLoading(true)
       
       let q = query(
-        collection(firebaseDb, 'prompts'),
+        collection(platformDb, 'prompts'),
         where('visibility', '==', true), // Only public prompts
         orderBy('createdAt', 'desc'),
         limit(50)
@@ -131,7 +131,7 @@ export function PromptList({
       // If userId is provided, filter by user
       if (userId) {
         q = query(
-          collection(firebaseDb, 'prompts'),
+          collection(platformDb, 'prompts'),
           where('uid', '==', userId),
           orderBy('createdAt', 'desc')
         )
@@ -149,7 +149,7 @@ export function PromptList({
           if (data.uid) {
             try {
               const userDoc = await getDocs(query(
-                collection(firebaseDb, 'users'),
+                collection(platformDb, 'users'),
                 where('__name__', '==', data.uid)
               ))
               if (!userDoc.empty) {

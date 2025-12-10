@@ -40,7 +40,8 @@ export function generateCacheKey(params: any): string {
     params.userPrompt?.substring(0, 100), // First 100 chars
     params.systemPrompt?.substring(0, 50),
     params.temperature,
-    params.maxTokens
+    params.maxTokens,
+    params.workflow
   ]
   return `api_studio:${JSON.stringify(keyParts)}`
 }

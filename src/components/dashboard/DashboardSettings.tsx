@@ -15,13 +15,13 @@ import {
   getDocs,
   updateDoc,
   doc
-} from "firebase/firestore"
+} from "@/lib/platformStubs/firestore"
 import {
   ref as storageRef,
   uploadBytes,
   getDownloadURL
-} from "firebase/storage"
-import { firebaseDb, firebaseStorage, isFirebaseConfigured } from "@/lib/firebaseClient"
+} from "@/lib/platformStubs/storage"
+import { platformDb, platformStorage, isSupabaseConfigured } from "@/lib/platformClient"
 import { 
   Settings,
   User,
@@ -36,8 +36,28 @@ import {
   EyeOff,
   Bell,
   Shield,
-  Palette
+  Palette,
+  MessageSquare
 } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Separator } from "@/components/ui/separator"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Slider } from "@/components/ui/slider"
+
+interface ChatSettings {
+  model: string
+  temperature: number
+  maxTokens: number
+  defaultPlaybook: string
+  autoSave: boolean
+  showTimestamps: boolean
+  soundEnabled: boolean
+  markdownEnabled: boolean
+  codeHighlighting: boolean
+  compactMode: boolean
+  fontSize: "small" | "medium" | "large"
+  theme: "dark" | "light" | "auto"
+}
 
 interface UserSettings {
   displayName: string
@@ -56,6 +76,7 @@ interface UserSettings {
     showEmail: boolean
     showFollowers: boolean
   }
+  chat?: ChatSettings
 }
 
 export function DashboardSettings() {
@@ -82,7 +103,24 @@ export function DashboardSettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [activeTab, setActiveTab] = useState<"profile" | "notifications" | "privacy">("profile")
+  const [activeTab, setActiveTab] = useState<"profile" | "notifications" | "privacy" | "chat">("profile")
+  
+  // Check if opened from chat
+  useEffect(() => {
+    const hash = window.location.hash
+    if (hash.includes("settings") && hash.includes("chat")) {
+      setActiveTab("chat")
+    }
+    // Check URL params
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.get("tab") === "chat") {
+      setActiveTab("chat")
+    }
+  }, [])
+
+  const handleBackToChat = () => {
+    window.location.hash = "#chat"
+  }
 
   // Load user settings
   const loadSettings = async () => {
@@ -91,7 +129,7 @@ export function DashboardSettings() {
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - use current user data
       setSettings({
         displayName: currentUser.displayName || currentUser.email?.split('@')[0] || "",
@@ -119,7 +157,7 @@ export function DashboardSettings() {
       setLoading(true)
 
       const userQuery = query(
-        collection(firebaseDb, 'users'),
+        collection(platformDb, 'users'),
         where('__name__', '==', currentUser.uid)
       )
       const userSnapshot = await getDocs(userQuery)
@@ -175,7 +213,7 @@ export function DashboardSettings() {
 
   // Handle image upload
   const handleImageUpload = async (file: File) => {
-    if (!isFirebaseConfigured || !firebaseStorage) {
+    if (!isSupabaseConfigured || !platformStorage) {
       // Demo mode - just update local state
       const reader = new FileReader()
       reader.onload = (e) => {
@@ -188,7 +226,7 @@ export function DashboardSettings() {
 
     setUploading(true)
     try {
-      const imageRef = storageRef(firebaseStorage, `avatars/${currentUser?.uid}/${Date.now()}`)
+      const imageRef = storageRef(platformStorage, `avatars/${currentUser?.uid}/${Date.now()}`)
       const snapshot = await uploadBytes(imageRef, file)
       const downloadURL = await getDownloadURL(snapshot.ref)
       
@@ -206,7 +244,7 @@ export function DashboardSettings() {
   const handleSaveSettings = async () => {
     if (!currentUser) return
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - just show success
       setSaving(true)
       setTimeout(() => {
@@ -218,7 +256,7 @@ export function DashboardSettings() {
 
     setSaving(true)
     try {
-      const userRef = doc(firebaseDb, 'users', currentUser.uid)
+      const userRef = doc(platformDb, 'users', currentUser.uid)
       await updateDoc(userRef, {
         displayName: settings.displayName,
         bio: settings.bio,
@@ -237,6 +275,46 @@ export function DashboardSettings() {
     }
   }
 
+  // Load chat settings from localStorage
+  const loadChatSettings = (): ChatSettings => {
+    try {
+      const stored = localStorage.getItem("pnx_chat_settings")
+      if (stored) {
+        return JSON.parse(stored)
+      }
+    } catch (e) {
+      console.error("Error loading chat settings:", e)
+    }
+    return {
+      model: "free-hf",
+      temperature: 0.35,
+      maxTokens: 512,
+      defaultPlaybook: "product-launch",
+      autoSave: true,
+      showTimestamps: true,
+      soundEnabled: false,
+      markdownEnabled: true,
+      codeHighlighting: true,
+      compactMode: false,
+      fontSize: "medium",
+      theme: "dark"
+    }
+  }
+
+  const [chatSettings, setChatSettings] = useState<ChatSettings>(loadChatSettings())
+
+  // Save chat settings to localStorage
+  const saveChatSettings = (newSettings: ChatSettings) => {
+    try {
+      localStorage.setItem("pnx_chat_settings", JSON.stringify(newSettings))
+      setChatSettings(newSettings)
+      success("Saved", "Chat settings saved successfully")
+    } catch (e) {
+      console.error("Error saving chat settings:", e)
+      error("Save failed", "Failed to save chat settings")
+    }
+  }
+
   // Load settings on mount
   useEffect(() => {
     loadSettings()
@@ -245,7 +323,8 @@ export function DashboardSettings() {
   const tabs = [
     { id: "profile", label: "Profile", icon: User },
     { id: "notifications", label: "Notifications", icon: Bell },
-    { id: "privacy", label: "Privacy", icon: Shield }
+    { id: "privacy", label: "Privacy", icon: Shield },
+    { id: "chat", label: "Chat", icon: MessageSquare }
   ]
 
   if (loading) {
@@ -522,6 +601,240 @@ export function DashboardSettings() {
                   </Button>
                 </CardContent>
               </Card>
+            )}
+
+            {activeTab === "chat" && (
+              <div className="space-y-6">
+                {/* Back to Chat Button */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold">Chat Settings</h2>
+                    <p className="text-sm text-muted-foreground mt-1">Customize your AI chat experience</p>
+                  </div>
+                  <Button variant="outline" onClick={handleBackToChat}>
+                    <MessageSquare className="h-4 w-4 mr-2" />
+                    Back to Chat
+                  </Button>
+                </div>
+
+                {/* Model & Performance Settings */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Model & Performance</CardTitle>
+                    <p className="text-sm text-muted-foreground">Configure AI model and response settings</p>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-2">
+                      <Label>Default Model</Label>
+                      <Select
+                        value={chatSettings.model}
+                        onValueChange={(value) => setChatSettings(prev => ({ ...prev, model: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="free-hf">PromptNX Free Model</SelectItem>
+                          <SelectItem value="enterprise-ops" disabled>Enterprise Routing (Requires upgrade)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">Choose your preferred AI model for chat responses</p>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <Label>Temperature: {chatSettings.temperature.toFixed(2)}</Label>
+                          <span className="text-xs text-muted-foreground">
+                            {chatSettings.temperature < 0.5 ? "Focused" : chatSettings.temperature < 1.0 ? "Balanced" : "Creative"}
+                          </span>
+                        </div>
+                        <Slider
+                          value={[chatSettings.temperature]}
+                          onValueChange={(value) => setChatSettings(prev => ({ ...prev, temperature: value[0] }))}
+                          min={0}
+                          max={2}
+                          step={0.01}
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Lower values make responses more focused and deterministic. Higher values increase creativity.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Max Tokens</Label>
+                        <Input
+                          type="number"
+                          min="128"
+                          max="4096"
+                          step="128"
+                          value={chatSettings.maxTokens}
+                          onChange={(e) => setChatSettings(prev => ({ ...prev, maxTokens: parseInt(e.target.value) || 512 }))}
+                        />
+                        <p className="text-xs text-muted-foreground">Maximum length of AI responses (128-4096 tokens)</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Default Playbook</Label>
+                        <Select
+                          value={chatSettings.defaultPlaybook}
+                          onValueChange={(value) => setChatSettings(prev => ({ ...prev, defaultPlaybook: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="product-launch">Product Launch OS</SelectItem>
+                            <SelectItem value="customer-success">Customer Success Playbook</SelectItem>
+                            <SelectItem value="ops-maturity">Ops Maturity Sprint</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">Default strategy lens for new conversations</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* UI & Display Settings */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>UI & Display</CardTitle>
+                    <p className="text-sm text-muted-foreground">Customize chat interface appearance</p>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label>Show Timestamps</Label>
+                          <p className="text-sm text-muted-foreground">Display time for each message</p>
+                        </div>
+                        <Switch
+                          checked={chatSettings.showTimestamps}
+                          onCheckedChange={(checked) => setChatSettings(prev => ({ ...prev, showTimestamps: checked }))}
+                        />
+                      </div>
+
+                      <Separator />
+
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label>Markdown Rendering</Label>
+                          <p className="text-sm text-muted-foreground">Render markdown formatting in messages</p>
+                        </div>
+                        <Switch
+                          checked={chatSettings.markdownEnabled}
+                          onCheckedChange={(checked) => setChatSettings(prev => ({ ...prev, markdownEnabled: checked }))}
+                        />
+                      </div>
+
+                      <Separator />
+
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label>Code Syntax Highlighting</Label>
+                          <p className="text-sm text-muted-foreground">Highlight code blocks with syntax colors</p>
+                        </div>
+                        <Switch
+                          checked={chatSettings.codeHighlighting}
+                          onCheckedChange={(checked) => setChatSettings(prev => ({ ...prev, codeHighlighting: checked }))}
+                        />
+                      </div>
+
+                      <Separator />
+
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label>Compact Mode</Label>
+                          <p className="text-sm text-muted-foreground">Reduce spacing for more messages on screen</p>
+                        </div>
+                        <Switch
+                          checked={chatSettings.compactMode}
+                          onCheckedChange={(checked) => setChatSettings(prev => ({ ...prev, compactMode: checked }))}
+                        />
+                      </div>
+
+                      <Separator />
+
+                      <div className="space-y-2">
+                        <Label>Font Size</Label>
+                        <Select
+                          value={chatSettings.fontSize}
+                          onValueChange={(value: "small" | "medium" | "large") => setChatSettings(prev => ({ ...prev, fontSize: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="small">Small</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="large">Large</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Theme</Label>
+                        <Select
+                          value={chatSettings.theme}
+                          onValueChange={(value: "dark" | "light" | "auto") => setChatSettings(prev => ({ ...prev, theme: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="dark">Dark</SelectItem>
+                            <SelectItem value="light">Light</SelectItem>
+                            <SelectItem value="auto">Auto (System)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Behavior Settings */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Behavior & Preferences</CardTitle>
+                    <p className="text-sm text-muted-foreground">Control chat behavior and features</p>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label>Auto-save Conversations</Label>
+                          <p className="text-sm text-muted-foreground">Automatically save chat history</p>
+                        </div>
+                        <Switch
+                          checked={chatSettings.autoSave}
+                          onCheckedChange={(checked) => setChatSettings(prev => ({ ...prev, autoSave: checked }))}
+                        />
+                      </div>
+
+                      <Separator />
+
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label>Sound Notifications</Label>
+                          <p className="text-sm text-muted-foreground">Play sound when AI responds</p>
+                        </div>
+                        <Switch
+                          checked={chatSettings.soundEnabled}
+                          onCheckedChange={(checked) => setChatSettings(prev => ({ ...prev, soundEnabled: checked }))}
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Button onClick={() => saveChatSettings(chatSettings)} className="w-full" size="lg">
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Chat Settings
+                </Button>
+              </div>
             )}
           </motion.div>
         </div>

@@ -17,13 +17,11 @@ import {
   CheckCircle
 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore"
 
 const STORAGE_KEY = "pnx_user_role"
 const ONBOARD_DONE_KEY = 'pnx_onboarding_done'
 
-type Role = "seller" | "buyer" | "both"
+type Role = "seller" | "buyer"
 
 export function RoleOnboarding({ onComplete }: { onComplete: (role: Role) => void }) {
   const [selected, setSelected] = useState<Role | null>(null)
@@ -35,8 +33,11 @@ export function RoleOnboarding({ onComplete }: { onComplete: (role: Role) => voi
 
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw === "seller" || raw === "buyer" || raw === "both") {
+    if (raw === "seller" || raw === "buyer") {
       onComplete(raw as Role)
+    } else if (raw === "both") {
+      // legacy value – default to seller for backwards compatibility
+      onComplete("seller")
     }
   }, [onComplete])
 
@@ -62,49 +63,6 @@ export function RoleOnboarding({ onComplete }: { onComplete: (role: Role) => voi
     // Persist locally for routing robustness
     localStorage.setItem(STORAGE_KEY, selected)
     localStorage.setItem(ONBOARD_DONE_KEY, '1')
-
-    // Persist in Firestore if available
-    try {
-      if (isFirebaseConfigured && firebaseDb && currentUser) {
-        const userRef = doc(firebaseDb, 'users', currentUser.uid)
-        const snap = await getDoc(userRef)
-        const existing: any = snap.exists() ? snap.data() : {}
-        const finalDisplayName = displayName || currentUser.displayName || existing.displayName || currentUser.email?.split('@')[0] || ''
-        await setDoc(userRef, {
-          ...existing,
-          uid: currentUser.uid,
-          email: currentUser.email,
-          displayName: finalDisplayName,
-          role: selected,
-          interests: interests,
-          preferences: { notificationsOptIn },
-          onboardingCompleted: true,
-          updatedAt: serverTimestamp(),
-          createdAt: existing?.createdAt || serverTimestamp()
-        }, { merge: true })
-
-        // Ensure role-specific profiles are created
-        if (selected === 'seller' || selected === 'both') {
-          await setDoc(doc(firebaseDb, 'sellers', currentUser.uid), {
-            uid: currentUser.uid,
-            email: currentUser.email,
-            displayName: finalDisplayName,
-            createdAt: serverTimestamp()
-          }, { merge: true })
-        }
-        if (selected === 'buyer' || selected === 'both') {
-          await setDoc(doc(firebaseDb, 'buyers', currentUser.uid), {
-            uid: currentUser.uid,
-            email: currentUser.email,
-            displayName: finalDisplayName,
-            createdAt: serverTimestamp()
-          }, { merge: true })
-        }
-      }
-    } catch (err) {
-      // Non-blocking; proceed even if persistence fails
-      console.warn('Failed to persist onboarding', err)
-    }
 
     onComplete(selected)
   }
@@ -137,7 +95,7 @@ export function RoleOnboarding({ onComplete }: { onComplete: (role: Role) => voi
 
       <AnimatePresence mode="wait">
         {step === 1 && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Seller Card */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <Card className={`cursor-pointer transition-all ${selected === 'seller' ? 'ring-2 ring-primary shadow-lg' : 'hover:shadow-md'}`} onClick={() => choose('seller')}>
@@ -196,35 +154,6 @@ export function RoleOnboarding({ onComplete }: { onComplete: (role: Role) => voi
           </Card>
         </motion.div>
 
-        {/* Both Card */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <Card className={`cursor-pointer transition-all ${selected === 'both' ? 'ring-2 ring-primary shadow-lg' : 'hover:shadow-md'}`} onClick={() => choose('both')}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  <Store className="h-5 w-5 text-primary" />
-                  <ShoppingBag className="h-5 w-5 text-primary" />
-                  I want Both
-                </CardTitle>
-                <Badge variant="outline" className="gap-1">
-                  <Sparkles className="h-3 w-3" /> Full access
-                </Badge>
-              </div>
-              <CardDescription>Sell your prompts and also buy from others. Switch anytime.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center gap-2 text-sm">
-                <TrendingUp className="h-4 w-4 text-green-600" /> Earnings + purchases in one place
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <Users className="h-4 w-4 text-blue-600" /> Grow audience and discover creators
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <Shield className="h-4 w-4 text-slate-600" /> All protections apply
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
         </motion.div>
         )}
 

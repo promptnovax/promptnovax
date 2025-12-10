@@ -3,8 +3,6 @@ import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/hooks/use-toast"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp } from "firebase/firestore"
 import { Heart } from "lucide-react"
 
 interface LikeButtonProps {
@@ -19,22 +17,20 @@ export function LikeButton({ promptId, initialLikes }: LikeButtonProps) {
   const [likesCount, setLikesCount] = useState(initialLikes)
   const [isLoading, setIsLoading] = useState(false)
 
+  const storageKey = currentUser ? `promptnx:likes:${currentUser.uid}` : null
+
   useEffect(() => {
-    if (currentUser && isFirebaseConfigured && firebaseDb) {
-      checkLikeStatus()
+    if (!currentUser) {
+      setIsLiked(false)
+      return
     }
-  }, [currentUser, promptId])
-
-  const checkLikeStatus = async () => {
-    if (!currentUser || !isFirebaseConfigured || !firebaseDb) return
-
     try {
-      const likeDoc = await getDoc(doc(firebaseDb, 'prompts', promptId, 'likes', currentUser.uid))
-      setIsLiked(likeDoc.exists())
-    } catch (err) {
-      console.error('Error checking like status:', err)
+      const stored = storageKey ? JSON.parse(localStorage.getItem(storageKey) || '[]') : []
+      setIsLiked(stored.includes(promptId))
+    } catch {
+      setIsLiked(false)
     }
-  }
+  }, [currentUser, promptId, storageKey])
 
   const handleLike = async () => {
     if (!currentUser) {
@@ -43,41 +39,26 @@ export function LikeButton({ promptId, initialLikes }: LikeButtonProps) {
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
-      // Mock functionality for demo mode
-      handleMockLike()
-      return
-    }
-
     setIsLoading(true)
 
     try {
-      const promptRef = doc(firebaseDb, 'prompts', promptId)
-      const likeRef = doc(firebaseDb, 'prompts', promptId, 'likes', currentUser.uid)
+      const storedLikes: string[] = storageKey
+        ? JSON.parse(localStorage.getItem(storageKey) || '[]')
+        : []
 
       if (isLiked) {
-        // Unlike
-        await updateDoc(promptRef, {
-          likes: likesCount - 1
-        })
-        await setDoc(likeRef, {
-          userId: currentUser.uid,
-          likedAt: serverTimestamp()
-        }, { merge: true })
-        
-        setLikesCount(prev => prev - 1)
+        const updated = storedLikes.filter(id => id !== promptId)
+        if (storageKey) {
+          localStorage.setItem(storageKey, JSON.stringify(updated))
+        }
+        setLikesCount(prev => Math.max(0, prev - 1))
         setIsLiked(false)
         success("Unliked", "You unliked this prompt")
       } else {
-        // Like
-        await updateDoc(promptRef, {
-          likes: likesCount + 1
-        })
-        await setDoc(likeRef, {
-          userId: currentUser.uid,
-          likedAt: serverTimestamp()
-        })
-        
+        const updated = Array.from(new Set([...storedLikes, promptId]))
+        if (storageKey) {
+          localStorage.setItem(storageKey, JSON.stringify(updated))
+        }
         setLikesCount(prev => prev + 1)
         setIsLiked(true)
         success("Liked!", "You liked this prompt")
@@ -87,18 +68,6 @@ export function LikeButton({ promptId, initialLikes }: LikeButtonProps) {
       error("Like failed", err.message || "Failed to like prompt. Please try again.")
     } finally {
       setIsLoading(false)
-    }
-  }
-
-  const handleMockLike = () => {
-    if (isLiked) {
-      setLikesCount(prev => prev - 1)
-      setIsLiked(false)
-      success("Unliked", "You unliked this prompt")
-    } else {
-      setLikesCount(prev => prev + 1)
-      setIsLiked(true)
-      success("Liked!", "You liked this prompt")
     }
   }
 

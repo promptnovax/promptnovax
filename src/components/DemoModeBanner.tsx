@@ -16,18 +16,18 @@ export function DemoModeBanner() {
         </div>
         <div className="ml-3 flex-1">
           <p className="text-sm text-yellow-700">
-            <strong>Demo Mode:</strong> Firebase is not configured. 
-            To enable authentication and database features, please set up your Firebase project.
+            <strong>Demo Mode:</strong> Supabase is not configured.
+            Connect your project to Supabase to unlock authentication, storage, and live marketplace data.
           </p>
         </div>
         <div className="ml-3">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.open('https://console.firebase.google.com/', '_blank')}
+            onClick={() => window.open('https://supabase.com/dashboard/projects', '_blank')}
           >
             <ExternalLink className="h-4 w-4 mr-2" />
-            Setup Firebase
+            Set up Supabase
           </Button>
         </div>
       </div>

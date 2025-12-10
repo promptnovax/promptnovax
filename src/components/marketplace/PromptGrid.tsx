@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { PromptCard } from "@/components/prompts/PromptCard"
-import { PromptPreviewModal } from "./PromptPreviewModal"
 import { 
   Loader2,
   FileText,
@@ -60,22 +59,9 @@ export function PromptGrid({
   onShare,
   onFollow
 }: PromptGridProps) {
-  const [selectedPrompt, setSelectedPrompt] = useState<PromptData | null>(null)
-  const [showPreviewModal, setShowPreviewModal] = useState(false)
-
   const handlePromptClick = (prompt: PromptData) => {
-    setSelectedPrompt(prompt)
-    setShowPreviewModal(true)
-  }
-
-  const handleViewFullPrompt = (promptId: string) => {
-    setShowPreviewModal(false)
-    window.location.hash = `#prompts/${promptId}`
-  }
-
-  const handleCloseModal = () => {
-    setShowPreviewModal(false)
-    setSelectedPrompt(null)
+    // Navigate directly to marketplace detail page
+    window.location.hash = `#marketplace/${prompt.id}`
   }
 
   if (error) {
@@ -245,17 +231,6 @@ export function PromptGrid({
         </div>
       )}
 
-      {/* Preview Modal */}
-      <PromptPreviewModal
-        prompt={selectedPrompt}
-        isOpen={showPreviewModal}
-        onClose={handleCloseModal}
-        onViewFull={handleViewFullPrompt}
-        onLike={onLike}
-        onSave={onSave}
-        onShare={onShare}
-        onFollow={onFollow}
-      />
     </div>
   )
 }

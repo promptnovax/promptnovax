@@ -6,8 +6,8 @@ import { AuthGuard } from "@/components/AuthGuard"
 import { PromptForm } from "@/components/prompts/PromptForm"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/hooks/use-toast"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
-import { doc, getDoc } from "firebase/firestore"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
+import { doc, getDoc } from "@/lib/platformStubs/firestore"
 import { ArrowLeft, Loader2, AlertCircle } from "lucide-react"
 
 interface PromptEditPageProps {
@@ -44,7 +44,7 @@ export function PromptEditPage({ id }: PromptEditPageProps) {
   }, [id])
 
   const loadPrompt = async () => {
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Mock data for demo mode
       loadMockData()
       return
@@ -52,7 +52,7 @@ export function PromptEditPage({ id }: PromptEditPageProps) {
 
     try {
       setLoading(true)
-      const promptRef = doc(firebaseDb, 'prompts', id)
+      const promptRef = doc(platformDb, 'prompts', id)
       const promptSnap = await getDoc(promptRef)
 
       if (!promptSnap.exists()) {

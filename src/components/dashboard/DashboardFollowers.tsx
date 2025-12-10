@@ -17,8 +17,8 @@ import {
   doc,
   arrayUnion,
   arrayRemove
-} from "firebase/firestore"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
+} from "@/lib/platformStubs/firestore"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
 import { 
   Users,
   Search,
@@ -59,7 +59,7 @@ export function DashboardFollowers() {
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - show mock data
       loadMockFollowers()
       return
@@ -70,7 +70,7 @@ export function DashboardFollowers() {
 
       // Get current user's data to find followers
       const userQuery = query(
-        collection(firebaseDb, 'users'),
+        collection(platformDb, 'users'),
         where('__name__', '==', currentUser.uid)
       )
       const userSnapshot = await getDocs(userQuery)
@@ -96,7 +96,7 @@ export function DashboardFollowers() {
       for (const followerId of followerIds) {
         try {
           const followerQuery = query(
-            collection(firebaseDb, 'users'),
+            collection(platformDb, 'users'),
             where('__name__', '==', followerId)
           )
           const followerSnapshot = await getDocs(followerQuery)
@@ -202,7 +202,7 @@ export function DashboardFollowers() {
 
   // Follow/Unfollow user
   const handleFollowToggle = async (followerId: string, isCurrentlyFollowing: boolean) => {
-    if (!currentUser || !isFirebaseConfigured || !firebaseDb) {
+    if (!currentUser || !isSupabaseConfigured || !platformDb) {
       // Demo mode - just update local state
       setFollowers(prev => 
         prev.map(follower => 
@@ -220,8 +220,8 @@ export function DashboardFollowers() {
 
     setFollowingBack(followerId)
     try {
-      const currentUserRef = doc(firebaseDb, 'users', currentUser.uid)
-      const followerRef = doc(firebaseDb, 'users', followerId)
+      const currentUserRef = doc(platformDb, 'users', currentUser.uid)
+      const followerRef = doc(platformDb, 'users', followerId)
       
       if (isCurrentlyFollowing) {
         // Unfollow

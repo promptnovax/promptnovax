@@ -1,6 +1,6 @@
-# Firebase Authentication System
+# Supabase Authentication System
 
-This document explains how to use the Firebase Authentication system implemented in this project.
+This document explains how to use the Supabase-based authentication system implemented in this project.
 
 ## Overview
 
@@ -18,10 +18,10 @@ The authentication system provides:
 The main authentication context that provides:
 - `currentUser`: Current authenticated user (null if not logged in)
 - `loading`: Loading state during authentication checks
-- `login(email, password)`: Sign in with email/password
-- `signup(email, password)`: Create new account with email/password
+- `login(email, password)`: Sign in with email/password (Supabase or demo fallback)
+- `signup(email, password)`: Create new account
 - `logout()`: Sign out current user
-- `loginWithGoogle()`: Sign in with Google OAuth
+- `loginWithGoogle()`: Sign in with Google OAuth (when Supabase OAuth is configured)
 
 ### 2. AuthGuard (`src/components/AuthGuard.tsx`)
 
@@ -170,25 +170,41 @@ function GoogleLoginButton() {
 Make sure these are set in your `.env.local`:
 
 ```env
-# Firebase Client Configuration
-NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+# Supabase Client Configuration
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_public_anon_key
 
-# Firebase Admin Configuration
-FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
+# Server-side (optional)
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 ```
 
-## Firebase Console Setup
+## Supabase Setup
 
-1. Enable Authentication in Firebase Console
-2. Enable Email/Password provider
-3. Enable Google provider
-4. Configure OAuth consent screen
-5. Add authorized domains
+1. Create a Supabase project at [supabase.com](https://supabase.com)
+2. In the Authentication settings, enable Email/Password and optional OAuth providers
+3. Copy the Project URL and anon key into your `.env` file
+4. (Optional) Generate a service role key for secure server-side token validation
+5. Configure redirect URLs for OAuth providers if you plan to use them
+
+## Backend API Endpoints
+
+The Express backend now exposes Supabase-backed auth routes so the frontend can proxy sensitive operations without shipping the service role key:
+
+- `POST /api/auth/signup` → Creates a Supabase user, assigns buyer/seller role metadata, and hydrates `profiles`/`seller_profiles`.
+- `POST /api/auth/login` → Performs email/password login, returns Supabase access/refresh tokens, and records the active session.
+- `POST /api/auth/logout` → Revokes all active tokens for the given user and flags stored sessions as revoked.
+- `POST /api/auth/refresh` → Exchanges a refresh token for a fresh access token + session record.
+- `POST /api/auth/password/reset` → Sends the Supabase password reset email using the configured redirect URL (`AUTH_PASSWORD_RESET_REDIRECT` in `backend/.env`).
+
+All routes log to the new `auth_events` table and leverage the `user_sessions` table for auditing.
+
+### Required environment variables (backend)
+
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=service-role-key
+AUTH_PASSWORD_RESET_REDIRECT=https://app.example.com/reset-password
+```
 
 ## Error Handling
 
@@ -204,11 +220,11 @@ All errors are logged to console and can be displayed to users via toast notific
 
 ## Security Notes
 
-- All authentication is handled by Firebase
+- All authentication is handled by Supabase
 - No sensitive data is stored in local state
-- Tokens are managed automatically by Firebase
-- Server-side verification uses Firebase Admin SDK
-- Client-side operations use Firebase Client SDK
+- Tokens are managed automatically by Supabase
+- Server-side verification will use the Supabase service role client
+- Client-side operations use the Supabase JavaScript SDK
 
 ## Testing
 

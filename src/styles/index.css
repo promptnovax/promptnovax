@@ -85,13 +85,61 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
   * {
     @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
   }
+  img,
+  video,
+  canvas,
+  svg {
+    max-width: 100%;
+    height: auto;
+  }
   a, button {
     transition: color .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+  }
+}
+
+@layer utilities {
+  .responsive-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (min-width: 1024px) {
+  body {
+    scroll-snap-type: y proximity;
+    scroll-padding-top: 80px;
+  }
+
+  section,
+  [data-snap-section="true"] {
+    scroll-snap-align: start;
+    scroll-snap-stop: normal;
+  }
+
+  [data-snap-strong="true"] {
+    scroll-snap-stop: always;
+  }
+
+  [data-stack-group="true"] {
+    position: relative;
+  }
+
+  [data-stack-group="true"] > [data-stack-panel="true"] {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  [data-stack-panel="true"][data-stack-foreground="true"] {
+    z-index: 2;
   }
 }

@@ -13,6 +13,7 @@ import heroBgVideo from "@/../media/hero bg video.mp4"
 import nextSectionVideo from "@/../media/next section.mp4"
 import dashboardSideVideo from "@/../media/dashboard side video.mp4"
 import { useTheme } from "@/components/theme-provider"
+import { cn } from "@/lib/utils"
 
 type HeroBackgroundConfig = {
   base: string
@@ -280,24 +281,28 @@ const heroValueProps = [
   {
     icon: Sparkles,
     title: "Prompt Marketplace",
-    description: "Curated kits for marketers, founders, agencies, and researchers."
+    description: "Curated kits for marketers, founders, agencies, and researchers.",
+    href: "#marketplace"
   },
   {
     icon: Zap,
     title: "Generator Studio",
-    description: "Structure complex multi-step prompts with reusable blueprints."
+    description: "Structure complex multi-step prompts with reusable blueprints.",
+    href: "#studio"
   },
   {
     icon: Shield,
     title: "API & Automations",
-    description: "Pipe prompts into products with secure API + workflow hooks."
+    description: "Pipe prompts into products with secure API + workflow hooks.",
+    href: "#api-studio"
   },
   {
     icon: Users,
     title: "Buyer Workspaces",
-    description: "Share, version, and collaborate on prompt libraries with teams."
+    description: "Share, version, and collaborate on prompt libraries with teams.",
+    href: "#launch-dashboard"
   }
-]
+] as const
 
 const immersiveHighlights = [
   {
@@ -541,18 +546,24 @@ export function EnhancedHomePage() {
               {heroValueProps.map((prop) => {
                 const Icon = prop.icon
                 return (
-                  <div
+                  <Link
                     key={prop.title}
-                    className={`flex flex-col gap-2 rounded-2xl border px-4 py-4 text-left backdrop-blur ${isDarkMode ? 'border-white/10 bg-white/5 text-white/90' : 'border-slate-200/70 bg-white/70 text-slate-900'}`}
+                    href={prop.href}
+                    className={cn(
+                      "flex flex-col gap-2 rounded-2xl border px-4 py-4 text-left backdrop-blur focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 group",
+                      isDarkMode ? "border-white/10 bg-white/5 text-white/90" : "border-slate-200/70 bg-white/70 text-slate-900"
+                    )}
+                    animate={false}
                   >
                     <div className="flex items-center gap-2 text-sm font-semibold">
                       <Icon className="h-4 w-4 text-primary" />
                       {prop.title}
+                      <ArrowRight className="h-3.5 w-3.5 text-primary/70 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                     <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-white/70' : 'text-slate-600'}`}>
                       {prop.description}
                     </p>
-                  </div>
+                  </Link>
                 )
               })}
             </motion.div>
@@ -626,18 +637,29 @@ export function EnhancedHomePage() {
         )
       })()}
 
-      <div id="pain-points" />
-      {/* Pain Points to Solutions */}
-      {(() => {
-        const Pains = lazy(() => import('@/components/marketing/PainPointsSection').then(m => ({ default: m.PainPointsSection })))
-        return (
-          <Suspense fallback={<div className="py-16" />}> 
-            <Pains />
-          </Suspense>
-        )
-      })()}
+      <div data-stack-group="true">
+        {/* Pain Points to Solutions */}
+        {(() => {
+          const Pains = lazy(() => import('@/components/marketing/PainPointsSection').then(m => ({ default: m.PainPointsSection })))
+          return (
+            <Suspense fallback={<div className="py-16" />}> 
+              <Pains />
+            </Suspense>
+          )
+        })()}
 
-      <div id="outcomes" />
+        {/* Complete Solutions Section */}
+        {(() => {
+          const Solutions = lazy(() => import('@/components/marketing/SolutionsSection').then(m => ({ default: m.SolutionsSection })))
+          return (
+            <Suspense fallback={<div className="py-16" />}> 
+              <Solutions />
+            </Suspense>
+          )
+        })()}
+      </div>
+
+      <div id="outcomes" className="scroll-mt-24" />
       {/* Outcomes (New Section #2) */}
       {(() => {
         const Outcomes = lazy(() => import('@/components/marketing/SaaSOutcomesSection').then(m => ({ default: m.SaaSOutcomesSection })))
@@ -648,7 +670,7 @@ export function EnhancedHomePage() {
         )
       })()}
 
-      <div id="product-tour" />
+      <div id="product-tour" className="scroll-mt-24" />
       {/* Product Tour (Section #3) */}
       {(() => {
         const ProductTour = lazy(() => import('@/components/marketing/ProductTourSection').then(m => ({ default: m.ProductTourSection })))
@@ -660,7 +682,7 @@ export function EnhancedHomePage() {
       })()}
 
 
-      <div id="use-cases" />
+        <div id="use-cases" className="scroll-mt-24" />
       {/* Use Cases (Section #4) */}
       {(() => {
         const UseCases = lazy(() => import('@/components/marketing/UseCasesSection').then(m => ({ default: m.UseCasesSection })))
@@ -762,80 +784,81 @@ export function EnhancedHomePage() {
         </div>
       </section>
 
-      {/* Features Section */}
-      <section id="features" className="relative py-20 overflow-hidden">
-        <div
-          className="absolute inset-0 -z-10 opacity-90"
-          style={{ background: gradientBackdrop }}
-          aria-hidden
-        />
-        <div
-          className="absolute inset-0 -z-9"
-          style={{ background: gradientBackdropOverlay }}
-          aria-hidden
-        />
-        <div className="container mx-auto px-4 relative">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className={`text-4xl md:text-5xl font-bold tracking-tight mb-4 ${featureHeadingText}`}>
-              Why Choose PromptNovaX?
-            </h2>
-            <p className={`text-xl max-w-2xl mx-auto ${featureSubText}`}>
-              Built for creators, developers, and businesses who want to unlock the full potential of AI.
-            </p>
-          </motion.div>
+      <div data-stack-group="true">
+        {/* Features Section */}
+        <section id="features" className="relative py-20 overflow-hidden min-h-[100vh]" data-stack-panel="true">
+          <div
+            className="absolute inset-0 -z-10 opacity-90"
+            style={{ background: gradientBackdrop }}
+            aria-hidden
+          />
+          <div
+            className="absolute inset-0 -z-9"
+            style={{ background: gradientBackdropOverlay }}
+            aria-hidden
+          />
+          <div className="container mx-auto px-4 relative">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+              viewport={{ once: true }}
+              className="text-center mb-16"
+            >
+              <h2 className={`text-4xl md:text-5xl font-bold tracking-tight mb-4 ${featureHeadingText}`}>
+                Why Choose PromptNovaX?
+              </h2>
+              <p className={`text-xl max-w-2xl mx-auto ${featureSubText}`}>
+                Built for creators, developers, and businesses who want to unlock the full potential of AI.
+              </p>
+            </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {features.map((feature, index) => {
-              const Icon = feature.icon
-              return (
-                <motion.div
-                  key={feature.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: index * 0.1 }}
-                  viewport={{ once: true }}
-                  whileHover={{ y: -5 }}
-                >
-                  <Card className={`h-full transition-all duration-300 ${featureCardClasses} hover:-translate-y-1`}>
-                    <CardHeader className="text-center">
-                      <div className="mx-auto mb-4 p-3 rounded-full bg-primary/10 w-fit">
-                        <Icon className={`h-8 w-8 ${feature.color}`} />
-                      </div>
-                      <CardTitle className="text-xl">{feature.title}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <CardDescription className="text-center">
-                        {feature.description}
-                      </CardDescription>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              )
-            })}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              {features.map((feature, index) => {
+                const Icon = feature.icon
+                return (
+                  <motion.div
+                    key={feature.title}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: index * 0.1 }}
+                    viewport={{ once: true }}
+                    whileHover={{ y: -5 }}
+                  >
+                    <Card className={`h-full transition-all duration-300 ${featureCardClasses} hover:-translate-y-1`}>
+                      <CardHeader className="text-center">
+                        <div className="mx-auto mb-4 p-3 rounded-full bg-primary/10 w-fit">
+                          <Icon className={`h-8 w-8 ${feature.color}`} />
+                        </div>
+                        <CardTitle className="text-xl">{feature.title}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <CardDescription className="text-center">
+                          {feature.description}
+                        </CardDescription>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                )
+              })}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      
+        <div id="generator" className="scroll-mt-24" />
+        <div id="studio" className="scroll-mt-24" />
+        {/* Advanced Generators Studio */}
+        {(() => {
+          const Studio = lazy(() => import('@/components/marketing/AdvancedGeneratorsSection').then(m => ({ default: m.AdvancedGeneratorsSection })))
+          return (
+            <Suspense fallback={<div className="py-16" />}> 
+              <Studio />
+            </Suspense>
+          )
+        })()}
+      </div>
 
-      <div id="studio" />
-      {/* Advanced Generators Studio */}
-      {(() => {
-        const Studio = lazy(() => import('@/components/marketing/AdvancedGeneratorsSection').then(m => ({ default: m.AdvancedGeneratorsSection })))
-        return (
-          <Suspense fallback={<div className="py-16" />}> 
-            <Studio />
-          </Suspense>
-        )
-      })()}
-
-      <div id="templates" />
+      <div id="templates" className="scroll-mt-24" />
       {/* Templates Library */}
       {(() => {
         const Templates = lazy(() => import('@/components/marketing/TemplatesLibrarySection').then(m => ({ default: m.TemplatesLibrarySection })))
@@ -847,7 +870,8 @@ export function EnhancedHomePage() {
       })()}
 
 
-      <div id="marketplace-highlight" />
+      <div id="marketplace" className="scroll-mt-24" />
+      <div id="marketplace-highlight" className="scroll-mt-24" />
       {/* Marketplace Highlight */}
       {(() => {
         const Market = lazy(() => import('@/components/marketing/MarketplaceHighlightSection').then(m => ({ default: m.MarketplaceHighlightSection })))
@@ -858,24 +882,24 @@ export function EnhancedHomePage() {
         )
       })()}
 
-      <div id="integrations" />
-      {/* Integrations (after marketplace) */}
+      <div id="api-studio" className="scroll-mt-24" />
+      {/* API Studio Promo */}
+      {(() => {
+        const ApiStudio = lazy(() => import('@/components/marketing/ApiStudioPromoSection').then(m => ({ default: m.ApiStudioPromoSection })))
+        return (
+          <Suspense fallback={<div className="py-16" />}> 
+            <ApiStudio />
+          </Suspense>
+        )
+      })()}
+
+      <div id="integrations" className="scroll-mt-24" />
+      {/* Integrations */}
       {(() => {
         const Integrations = lazy(() => import('@/components/marketing/IntegrationsSection').then(m => ({ default: m.IntegrationsSection })))
         return (
           <Suspense fallback={<div className="py-16" />}> 
             <Integrations />
-          </Suspense>
-        )
-      })()}
-
-      <div id="api-promo" />
-      {/* API Prompt Promo (moved below marketplace) */}
-      {(() => {
-        const ApiPromo = lazy(() => import('@/components/marketing/ApiPromptPromoSection').then(m => ({ default: m.ApiPromptPromoSection })))
-        return (
-          <Suspense fallback={<div className="py-16" />}> 
-            <ApiPromo />
           </Suspense>
         )
       })()}
@@ -931,15 +955,29 @@ export function EnhancedHomePage() {
         )
       })()}
 
-      {/* Customer Proof (replacing case studies) */}
-      {(() => {
-        const Proof = lazy(() => import('@/components/marketing/CustomerProofSection').then(m => ({ default: m.CustomerProofSection })))
-        return (
-          <Suspense fallback={<div className="py-16" />}> 
-            <Proof />
-          </Suspense>
-        )
-      })()}
+      <div data-stack-group="true">
+        {/* Customer Proof (replacing case studies) */}
+        <div data-stack-panel="true">
+          {(() => {
+            const Proof = lazy(() => import('@/components/marketing/CustomerProofSection').then(m => ({ default: m.CustomerProofSection })))
+            return (
+              <Suspense fallback={<div className="py-16" />}> 
+                <Proof />
+              </Suspense>
+            )
+          })()}
+        </div>
+
+        {/* Community Section */}
+        {(() => {
+          const Community = lazy(() => import('@/components/marketing/CommunitySection').then(m => ({ default: m.CommunitySection })))
+          return (
+            <Suspense fallback={<div className="py-16" />}> 
+              <Community />
+            </Suspense>
+          )
+        })()}
+      </div>
 
       {/* CTA Band */}
       <section className="py-16">
@@ -999,7 +1037,7 @@ export function EnhancedHomePage() {
                 </ul>
                 <div className="flex gap-3 pt-2">
                   <Button size="lg" asChild>
-                    <Link href="#dashboard/index">Open Dashboard</Link>
+                    <Link href="#login">Open Dashboard</Link>
                   </Button>
                   <Button size="lg" variant="outline" asChild>
                     <Link href="#help">Learn more</Link>

@@ -1,18 +1,26 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-if (!supabaseUrl) {
-  console.warn('Missing Supabase URL. Please set VITE_SUPABASE_URL in your env file.')
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
+
+let client: SupabaseClient | null = null
+
+if (isSupabaseConfigured) {
+  client = createClient(supabaseUrl!, supabaseAnonKey!)
+} else {
+  console.warn(
+    'Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable live data.'
+  )
 }
 
-if (!supabaseAnonKey) {
-  console.warn('Missing Supabase anon key. Please set VITE_SUPABASE_ANON_KEY in your env file.')
-}
+export const supabase = client
 
-export const supabase = createClient(
-  supabaseUrl || '',
-  supabaseAnonKey || ''
-)
+export function requireSupabase() {
+  if (!client) {
+    throw new Error('Supabase is not configured for this environment.')
+  }
+  return client
+}
 

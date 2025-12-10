@@ -1,22 +1,43 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from "react"
+import { FormEvent, useState, useMemo, useRef, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
-  Sparkles,
-  Shield,
-  Zap,
   Send,
-  RefreshCw,
   Loader2,
   Plus,
   Settings,
-  ExternalLink,
+  MessageSquare,
+  Trash2,
+  MoreVertical,
+  Bot,
+  User as UserIcon,
+  Copy,
+  Check,
+  Menu,
+  X,
+  Sparkles,
+  Store,
+  FileText,
+  Wand2,
+  ShoppingCart,
+  Paperclip,
+  Image as ImageIcon,
   Mic,
-  AudioLines
+  Smile,
+  Bell,
+  Search,
+  Edit,
+  CheckCircle,
+  XCircle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { useToast } from "@/hooks/use-toast"
 import { requestFreeChatResponse, type FreeChatMessage } from "@/lib/freeChatService"
+import { ChatSettingsModal } from "@/components/chat/ChatSettingsModal"
+import { NovaProfilePanel } from "@/components/chat/NovaProfilePanel"
+import { ChatSearchModal } from "@/components/chat/ChatSearchModal"
+import { NotificationsPanel } from "@/components/chat/NotificationsPanel"
+import { requestPromptGeneration } from "@/lib/promptGeneratorService"
 
 type ConversationMessage = {
   id: string
@@ -24,572 +45,932 @@ type ConversationMessage = {
   content: string
   createdAt: number
   status?: "complete" | "streaming"
-  latencyMs?: number
-  tokens?: {
-    prompt?: number
-    completion?: number
-  }
 }
 
-const STRATEGY_PLAYBOOKS = [
-  {
-    id: "product-launch",
-    title: "Product Launch OS",
-    focus: "Monetization & Adoption",
-    summary: "Align GTM narrative with finance KPIs before the Q1 board readout.",
-    checkpoints: ["Executive brief", "Activation dashboard", "Risk register"],
-    tone: "confident and executive",
-    metrics: {
-      northStar: "Activation Rate",
-      wow: "+12% WoW",
-      health: "Green"
-    }
-  },
-  {
-    id: "customer-success",
-    title: "Customer Success Playbook",
-    focus: "Retention & Expansion",
-    summary: "Stabilize enterprise accounts and surface upsell stories.",
-    checkpoints: ["NPS loop", "Churn map", "Success storyboard"],
-    tone: "empathetic and data-backed",
-    metrics: {
-      northStar: "Net Revenue Retention",
-      wow: "+4% WoW",
-      health: "Amber"
-    }
-  },
-  {
-    id: "ops-maturity",
-    title: "Ops Maturity Sprint",
-    focus: "Internal Automation",
-    summary: "Document the operating model for the RevOps council.",
-    checkpoints: ["Workflow audit", "Policy digest", "Enablement kit"],
-    tone: "precise and operational",
-    metrics: {
-      northStar: "Time-to-Resolution",
-      wow: "-18% WoW",
-      health: "Green"
-    }
-  }
-] as const
+type Conversation = {
+  id: string
+  title: string
+  messages: ConversationMessage[]
+  updatedAt: number
+}
 
-const MODEL_PRESETS = [
-  {
-    id: "free-hf",
-    label: "PromptNX Free Model",
-    tier: "Connected",
-    description: "Managed Hugging Face inference • Cost optimized",
-    latency: "~1.8s median",
-    temperature: 0.35,
-    maxTokens: 512,
-    status: "active"
-  },
-  {
-    id: "enterprise-ops",
-    label: "Enterprise Routing",
-    tier: "Requires upgrade",
-    description: "Routes to GPT-4o mini with Claude fallback",
-    latency: "~0.9s",
-    temperature: 0.2,
-    maxTokens: 1024,
-    status: "locked"
-  }
-] as const
+interface ChatSettings {
+  model: string
+  temperature: number
+  maxTokens: number
+  fontSize: "small" | "medium" | "large"
+  theme: "dark" | "light" | "auto"
+  soundEnabled: boolean
+  markdownEnabled: boolean
+  compactMode: boolean
+  autoSave: boolean
+}
 
-const QUICK_PROMPTS = [
-  {
-    id: "exec-brief",
-    title: "Executive Brief",
-    detail: "Translate this thread into a board-ready status memo."
-  },
-  {
-    id: "risk-grid",
-    title: "Risk Grid",
-    detail: "List assumptions, blockers, owners, and mitigation paths."
-  },
-  {
-    id: "customer-story",
-    title: "Customer Story",
-    detail: "Package insight into a narrative for the customer advisory board."
-  }
-] as const
+const DEFAULT_SETTINGS: ChatSettings = {
+  model: "free-hf",
+  temperature: 0.7,
+  maxTokens: 512,
+  fontSize: "medium",
+  theme: "dark",
+  soundEnabled: false,
+  markdownEnabled: true,
+  compactMode: false,
+  autoSave: true
+}
 
 const INITIAL_MESSAGES: ConversationMessage[] = [
   {
     id: "assistant-welcome",
     role: "assistant",
-    content: "Welcome back to PromptNX Copilot. I'm holding the Product Launch OS playbook and watching activation KPIs. What's the next move we should sharpen?",
+    content: "Hello! I'm NOVA, your AI assistant. How can I help you today?",
     createdAt: Date.now() - 1000
-  },
-  {
-    id: "user-intent",
-    role: "user",
-    content: "We need a sharper narrative for the PLG add-on before finance reviews it. Highlight measurable revenue impact.",
-    createdAt: Date.now() - 800
-  },
-  {
-    id: "assistant-plan",
-    role: "assistant",
-    content: "Roger that. I'll anchor on monetization levers, GTM velocity, and downstream ops requirements. Drop any fresh signals and I'll reframe the launch storyline in real time.",
-    createdAt: Date.now() - 600
   }
 ]
 
 export function ChatPage() {
-  const [messages, setMessages] = useState<ConversationMessage[]>(INITIAL_MESSAGES)
-  const [composerValue, setComposerValue] = useState("")
-  const [selectedPlaybookId, setSelectedPlaybookId] = useState<string>(STRATEGY_PLAYBOOKS[0].id)
-  const [selectedModelId, setSelectedModelId] = useState<string>(MODEL_PRESETS[0].id)
-  const [isSending, setIsSending] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-const [sessionMeta, setSessionMeta] = useState({
-    turns: INITIAL_MESSAGES.length,
-    avgLatency: 1500,
-    cacheHits: 0,
-    tokens: {
-      prompt: 0,
-      completion: 0,
-      total: 0
+  const { toast } = useToast()
+  const [conversations, setConversations] = useState<Conversation[]>([
+    {
+      id: "default",
+      title: "New Conversation",
+      messages: INITIAL_MESSAGES,
+      updatedAt: Date.now()
     }
-  })
+  ])
+  const [activeConversationId, setActiveConversationId] = useState<string>("default")
+  const [messageInput, setMessageInput] = useState("")
+  const [isSending, setIsSending] = useState(false)
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [novaProfileOpen, setNovaProfileOpen] = useState(false)
+  const [isEnhancingPrompt, setIsEnhancingPrompt] = useState(false)
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editMessageContent, setEditMessageContent] = useState("")
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([])
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  
+  // Load settings from localStorage
+  const loadSettings = (): ChatSettings => {
+    try {
+      const stored = localStorage.getItem("pnx_chat_settings")
+      if (stored) {
+        return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
+      }
+    } catch (e) {
+      console.error("Error loading chat settings:", e)
+    }
+    return DEFAULT_SETTINGS
+  }
 
-const [userHandle] = useState(() => {
-    if (typeof window === "undefined") return "Operator"
-    return window.localStorage.getItem("pnx:user-handle") || "Operator"
-  })
+  const [chatSettings, setChatSettings] = useState<ChatSettings>(loadSettings)
 
-  const endOfMessagesRef = useRef<HTMLDivElement>(null)
-  const composerRef = useRef<HTMLTextAreaElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
-const userInitials = useMemo(() => {
-    const initials = userHandle
-      .split(" ")
-      .filter(Boolean)
-      .map((part) => part.charAt(0))
-      .join("")
-      .slice(0, 2)
-    return initials ? initials.toUpperCase() : "ME"
-  }, [userHandle])
-
-const activePlaybook = useMemo(
-    () => STRATEGY_PLAYBOOKS.find((playbook) => playbook.id === selectedPlaybookId) ?? STRATEGY_PLAYBOOKS[0],
-    [selectedPlaybookId]
+  const activeConversation = useMemo(
+    () => conversations.find((c) => c.id === activeConversationId) || conversations[0],
+    [conversations, activeConversationId]
   )
 
-const activeModel = useMemo(
-    () => MODEL_PRESETS.find((model) => model.id === selectedModelId) ?? MODEL_PRESETS[0],
-    [selectedModelId]
-  )
+  const messages = activeConversation?.messages || []
 
+  // Auto scroll to bottom when new messages arrive
   useEffect(() => {
-  const id = window.setTimeout(() => {
-    endOfMessagesRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
-  }, 80)
-  return () => window.clearTimeout(id)
-}, [messages])
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages])
 
+  // Auto resize textarea
   useEffect(() => {
-    if (!composerRef.current) return
-    composerRef.current.style.height = "auto"
-    composerRef.current.style.height = `${composerRef.current.scrollHeight}px`
-  }, [composerValue])
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto"
+      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 200)}px`
+    }
+  }, [messageInput])
 
-const CONVERSATION_SUGGESTIONS = [
-  "Line up the GTM story with finance guardrails.",
-  "Summarize the adoption risks in 3 bullets.",
-  "Draft an update thread for the PLG steering group.",
-  "Translate this roadmap into exec-ready talking points."
-] as const
+  // Focus input when conversation changes
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [activeConversationId])
 
-  const buildSystemPrompt = useCallback(() => {
-    return [
-      "You are PromptNX Copilot, an enterprise AI partner for SaaS operators.",
-      `Playbook: ${activePlaybook.title} (${activePlaybook.focus})`,
-      "Expectations:",
-      "- Respond like a senior product strategist supporting an exec team.",
-      "- Lead with measurable outcomes, KPIs, and next steps.",
-      "- Keep responses concise (<= 250 words) with an executive tone.",
-      "- Reference activation, finance, or operational impact whenever possible."
-    ].join("\n")
-  }, [activePlaybook])
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+K or Cmd+K for search
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+      // Escape to close modals
+      if (e.key === "Escape") {
+        setSearchOpen(false)
+        setNotificationsOpen(false)
+        setNovaProfileOpen(false)
+        setSettingsOpen(false)
+      }
+    }
 
-  const handleResetThread = () => {
-    setMessages(INITIAL_MESSAGES)
-    setSessionMeta({
-      turns: INITIAL_MESSAGES.length,
-      avgLatency: 1500,
-      cacheHits: 0,
-      tokens: { prompt: 0, completion: 0, total: 0 }
-    })
-    setComposerValue("")
-    setErrorMessage(null)
-  }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [])
 
-  const insertQuickPrompt = (prompt: string) => {
-    setComposerValue((prev) => (prev.trim() ? `${prev.trim()}\n\n${prompt}` : prompt))
-  }
+  // Auto-save conversations if enabled
+  useEffect(() => {
+    if (chatSettings.autoSave && conversations.length > 0) {
+      try {
+        localStorage.setItem("pnx_chat_conversations", JSON.stringify(conversations))
+      } catch (e) {
+        console.error("Error auto-saving conversations:", e)
+      }
+    }
+  }, [conversations, chatSettings.autoSave])
 
-  const handleOpenNewTab = () => {
-    if (typeof window === "undefined") return
-    const nextUrl = `${window.location.origin}/#chat?thread=${Date.now()}`
-    window.open(nextUrl, "_blank", "noopener,noreferrer")
-  }
+  // Load saved conversations on mount
+  useEffect(() => {
+    if (chatSettings.autoSave) {
+      try {
+        const saved = localStorage.getItem("pnx_chat_conversations")
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setConversations(parsed)
+            setActiveConversationId(parsed[0].id)
+          }
+        }
+      } catch (e) {
+        console.error("Error loading saved conversations:", e)
+      }
+    }
+  }, [])
 
-  const handleOpenSettings = () => {
-    if (typeof window === "undefined") return
-    window.location.hash = "#dashboard/settings"
-  }
+  const handleSendMessage = async (e?: FormEvent) => {
+    e?.preventDefault()
+    const trimmed = messageInput.trim()
+    if ((!trimmed && attachedFiles.length === 0) || isSending) return
 
-  const handleOpenDocs = () => {
-    if (typeof window === "undefined") return
-    window.location.hash = "#marketplace"
-  }
-
-  const handleSendMessage = async () => {
-    const trimmed = composerValue.trim()
-    if (!trimmed) return
+    // Build message content with file info
+    let content = trimmed
+    if (attachedFiles.length > 0) {
+      const fileNames = attachedFiles.map((f) => f.name).join(", ")
+      content = content
+        ? `${content}\n\n[Attached: ${fileNames}]`
+        : `[Attached: ${fileNames}]`
+    }
 
     const userMessage: ConversationMessage = {
       id: `user-${Date.now()}`,
       role: "user",
-      content: trimmed,
+      content: content,
       createdAt: Date.now(),
       status: "complete"
     }
 
-    const snapshot = [...messages, userMessage]
-    setMessages(snapshot)
-    setComposerValue("")
-    setErrorMessage(null)
+    // Update conversation with user message
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === activeConversationId
+          ? {
+              ...conv,
+              messages: [...conv.messages, userMessage],
+              updatedAt: Date.now(),
+              title: conv.id === "default" && conv.messages.length === 1 ? trimmed.slice(0, 50) : conv.title
+            }
+          : conv
+      )
+    )
+
+    const messageToSend = trimmed
+    setMessageInput("")
+    setAttachedFiles([]) // Clear attached files after sending
     setIsSending(true)
 
+    // Add placeholder for assistant response
     const placeholderId = `assistant-${Date.now()}`
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: placeholderId,
-        role: "assistant",
-        content: "Synthesizing a structured recommendation...",
-        createdAt: Date.now(),
-        status: "streaming"
-      }
-    ])
-
-    const payloadMessages: FreeChatMessage[] = [
-      { role: "system", content: buildSystemPrompt() },
-      ...snapshot.map((message) => ({
-        role: message.role,
-        content: message.content
-      }))
-    ]
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === activeConversationId
+          ? {
+              ...conv,
+              messages: [
+                ...conv.messages,
+                {
+                  id: placeholderId,
+                  role: "assistant",
+                  content: "",
+                  createdAt: Date.now(),
+                  status: "streaming"
+                }
+              ]
+            }
+          : conv
+      )
+    )
 
     try {
+      const allMessages = [...messages, userMessage]
+      const payloadMessages: FreeChatMessage[] = allMessages.map((msg) => ({
+        role: msg.role,
+        content: msg.content
+      }))
+
       const response = await requestFreeChatResponse({
         messages: payloadMessages,
-        systemPrompt: buildSystemPrompt(),
-        temperature: activeModel.temperature,
-        maxTokens: activeModel.maxTokens,
-        tone: activePlaybook.tone
+        systemPrompt: "You are NOVA, a helpful AI assistant. Be concise, clear, and professional.",
+        temperature: chatSettings.temperature,
+        maxTokens: chatSettings.maxTokens
       })
 
-      setMessages((prev) =>
-        prev.map((message) =>
-          message.id === placeholderId
+      // Update with actual response
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv.id === activeConversationId
             ? {
-                ...message,
-                content: response.message,
-                status: "complete",
-                latencyMs: response.metadata?.latencyMs,
-                tokens: {
-                  prompt: response.metadata?.tokens?.prompt,
-                  completion: response.metadata?.tokens?.completion
-                }
+                ...conv,
+                messages: conv.messages.map((msg) =>
+                  msg.id === placeholderId
+                    ? {
+                        ...msg,
+                        content: response.message,
+                        status: "complete"
+                      }
+                    : msg
+                ),
+                updatedAt: Date.now()
               }
-            : message
+            : conv
         )
       )
 
-      setSessionMeta((prev) => {
-        const turns = prev.turns + 1
-        const latency = response.metadata?.latencyMs ?? prev.avgLatency
-        const avgLatency = Math.round(((prev.avgLatency * prev.turns) + latency) / turns)
-        return {
-          turns,
-          avgLatency,
-          cacheHits: prev.cacheHits + (response.metadata?.cached ? 1 : 0),
-          tokens: {
-            prompt: prev.tokens.prompt + (response.metadata?.tokens?.prompt ?? 0),
-            completion: prev.tokens.completion + (response.metadata?.tokens?.completion ?? 0),
-            total: prev.tokens.total + (response.metadata?.tokens?.total ?? 0)
-          }
+      // Play sound if enabled
+      if (chatSettings.soundEnabled && typeof window !== "undefined") {
+        try {
+          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+          const oscillator = audioContext.createOscillator()
+          const gainNode = audioContext.createGain()
+          oscillator.connect(gainNode)
+          gainNode.connect(audioContext.destination)
+          oscillator.frequency.value = 800
+          oscillator.type = "sine"
+          gainNode.gain.setValueAtTime(0.1, audioContext.currentTime)
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1)
+          oscillator.start(audioContext.currentTime)
+          oscillator.stop(audioContext.currentTime + 0.1)
+        } catch (e) {
+          console.error("Error playing sound:", e)
         }
-      })
+      }
     } catch (error: any) {
-      setErrorMessage(error?.message || "Free model is unavailable right now. Please try again.")
-      setMessages((prev) => prev.filter((message) => message.id !== placeholderId))
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to get response. Please try again.",
+        variant: "destructive"
+      })
+      // Remove placeholder on error
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv.id === activeConversationId
+            ? {
+                ...conv,
+                messages: conv.messages.filter((msg) => msg.id !== placeholderId)
+              }
+            : conv
+        )
+      )
     } finally {
       setIsSending(false)
     }
   }
 
+  const handleNewConversation = () => {
+    const newId = `conv-${Date.now()}`
+    const newConversation: Conversation = {
+      id: newId,
+      title: "New Conversation",
+      messages: INITIAL_MESSAGES,
+      updatedAt: Date.now()
+    }
+    setConversations((prev) => [newConversation, ...prev])
+    setActiveConversationId(newId)
+    setMessageInput("")
+  }
+
+  const handleDeleteConversation = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (conversations.length === 1) {
+      toast({
+        title: "Cannot delete",
+        description: "You must have at least one conversation.",
+        variant: "destructive"
+      })
+      return
+    }
+    setConversations((prev) => prev.filter((conv) => conv.id !== id))
+    if (activeConversationId === id) {
+      const remaining = conversations.filter((conv) => conv.id !== id)
+      setActiveConversationId(remaining[0]?.id || "default")
+    }
+  }
+
+  const handleCopyMessage = async (content: string, messageId: string) => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopiedMessageId(messageId)
+      setTimeout(() => setCopiedMessageId(null), 2000)
+      toast({
+        title: "Copied!",
+        description: "Message copied to clipboard"
+      })
+    } catch (error) {
+      toast({
+        title: "Copy failed",
+        description: "Could not copy to clipboard",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleEnhancePrompt = async () => {
+    const trimmed = messageInput.trim()
+    if (!trimmed || isEnhancingPrompt) return
+
+    setIsEnhancingPrompt(true)
+    try {
+      const response = await requestPromptGeneration({
+        userInput: trimmed,
+        promptType: "general",
+        aiPlatform: "chatgpt",
+        outputFormat: "structured",
+        language: "en",
+        mode: "enhance"
+      })
+
+      if (response.success && response.prompt) {
+        setMessageInput(response.prompt)
+        toast({
+          title: "Prompt Enhanced!",
+          description: "Your message has been optimized for better AI understanding."
+        })
+      } else {
+        toast({
+          title: "Enhancement failed",
+          description: "Could not enhance prompt. Using original message.",
+          variant: "destructive"
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to enhance prompt.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsEnhancingPrompt(false)
+    }
+  }
+
+  const renderMessageContent = (content: string) => {
+    if (!chatSettings.markdownEnabled) {
+      return <div className="whitespace-pre-wrap">{content}</div>
+    }
+
+    // Basic markdown support
+    let processed = content
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.+?)\*/g, "<em>$1</em>")
+      .replace(/`([^`]+)`/g, '<code class="bg-black/40 px-1.5 py-0.5 rounded text-xs font-mono">$1</code>')
+      .replace(/\n/g, "<br />")
+
+    return <div className="whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: processed }} />
+  }
+
+  const userInitials = useMemo(() => {
+    if (typeof window === "undefined") return "U"
+    const handle = window.localStorage.getItem("pnx:user-handle") || "User"
+    return handle
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "U"
+  }, [])
+
   return (
-    <div className="min-h-screen bg-[#05070e] text-white">
-      <div className="px-4 sm:px-6 lg:px-8 py-10">
-        <div className="max-w-4xl mx-auto flex flex-col gap-8">
-          <nav className="rounded-[28px] border border-white/10 bg-black/40 backdrop-blur px-5 py-4 flex flex-wrap items-center justify-between gap-4 shadow-[0_25px_60px_rgba(0,0,0,0.35)]">
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-primary/70 to-primary/40 text-black font-semibold flex items-center justify-center">
-                PN
-              </div>
-              <div>
-                <p className="text-sm uppercase tracking-[0.35em] text-white/40">PromptNX</p>
-                <p className="text-lg font-semibold">NOVA Copilot</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
+    <div className="flex h-screen bg-[#05070e] text-white overflow-hidden">
+      {/* Left Sidebar */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.aside
+            initial={{ x: -300, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: -300, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="w-64 bg-[#0a0d14] border-r border-white/10 flex flex-col"
+          >
+            {/* Sidebar Header */}
+            <div className="p-4 border-b border-white/10">
               <Button
-                size="sm"
-                className="rounded-full"
-                onClick={handleResetThread}
+                onClick={handleNewConversation}
+                className="w-full bg-primary hover:bg-primary/90 text-white rounded-lg"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                New Thread
+                New Chat
               </Button>
+            </div>
+
+            {/* Conversations List */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-2 space-y-1">
+                {conversations.map((conv) => (
+                  <motion.div
+                    key={conv.id}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <button
+                      onClick={() => setActiveConversationId(conv.id)}
+                      className={`w-full group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
+                        activeConversationId === conv.id
+                          ? "bg-primary/20 text-white border border-primary/30"
+                          : "hover:bg-white/5 text-white/70 hover:text-white"
+                      }`}
+                    >
+                      <MessageSquare className="h-4 w-4 flex-shrink-0" />
+                      <span className="flex-1 text-left truncate">{conv.title}</span>
+                      <button
+                        onClick={(e) => handleDeleteConversation(conv.id, e)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-white/10 rounded"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-white/50 hover:text-red-400" />
+                      </button>
+                    </button>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="p-4 border-t border-white/10 space-y-2">
               <Button
-                variant="outline"
-                size="sm"
-                className="rounded-full border-white/30 text-white/90"
-                onClick={handleOpenNewTab}
+                variant="ghost"
+                className="w-full justify-start text-white/70 hover:text-white"
+                onClick={() => {
+                  window.location.hash = "#marketplace"
+                  setSidebarOpen(false)
+                }}
               >
-                <ExternalLink className="h-4 w-4 mr-2" />
-                New Tab
+                <Store className="h-4 w-4 mr-2" />
+                Marketplace
               </Button>
               <Button
                 variant="ghost"
-                size="sm"
-                className="rounded-full text-white/80 hover:text-white"
-                onClick={handleOpenSettings}
+                className="w-full justify-start text-white/70 hover:text-white"
+                onClick={() => {
+                  window.location.hash = "#templates"
+                  setSidebarOpen(false)
+                }}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Templates
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-white/70 hover:text-white"
+                onClick={() => {
+                  window.location.hash = "#prompt-generator"
+                  setSidebarOpen(false)
+                }}
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                Prompt Generator
+              </Button>
+            </div>
+
+            {/* Sidebar Footer */}
+            <div className="p-4 border-t border-white/10">
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-white/70 hover:text-white"
+                onClick={() => setSettingsOpen(true)}
               >
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full text-white/80 hover:text-white"
-                onClick={handleOpenDocs}
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top Bar */}
+        <div className="h-14 bg-[#0a0d14] border-b border-white/10 flex items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white/70 hover:text-white"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+            >
+              {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </Button>
+            <button
+              onClick={() => setNovaProfileOpen(true)}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            >
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary/70 to-primary/40 flex items-center justify-center">
+                <Bot className="h-5 w-5 text-white" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-semibold">NOVA AI</p>
+                <p className="text-xs text-white/50">AI Assistant</p>
+              </div>
+            </button>
+          </div>
+          
+          {/* Top Right Actions */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+              onClick={() => setSearchOpen(true)}
+              title="Search conversations (Ctrl+K)"
+            >
+              <Search className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all relative"
+              onClick={() => setNotificationsOpen(true)}
+              title="Notifications"
+            >
+              <Bell className="h-5 w-5" />
+              <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-primary rounded-full animate-pulse" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+              onClick={() => setSettingsOpen(true)}
+              title="Settings"
+            >
+              <Settings className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Messages Area - Scrollable */}
+        <div
+          ref={chatContainerRef}
+          className={`flex-1 overflow-y-auto px-4 py-6 ${
+            chatSettings.compactMode ? "space-y-3 py-4" : "space-y-6"
+          }`}
+        >
+          <AnimatePresence>
+            {messages.map((message) => (
+              <motion.div
+                key={message.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+                className={`flex gap-4 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                onMouseEnter={() => setHoveredMessageId(message.id)}
+                onMouseLeave={() => setHoveredMessageId(null)}
               >
-                Docs
-              </Button>
-            </div>
-          </nav>
-
-          <header className="space-y-6 text-center">
-            <div className="inline-flex flex-col sm:flex-row gap-4 items-center px-6 py-5 rounded-[28px] border border-white/10 bg-white/[0.04] backdrop-blur">
-              <Avatar className="h-12 w-12 border border-white/10 bg-white/10 text-white">
-                <AvatarFallback className="text-base font-semibold tracking-wide">
-                  NV
-                </AvatarFallback>
-              </Avatar>
-              <div className="space-y-1 text-left">
-                <p className="text-[11px] uppercase tracking-[0.35em] text-white/50">Nova Assistant</p>
-                <h1 className="text-2xl sm:text-3xl font-semibold leading-tight">What's happening, {userHandle}?</h1>
-                <p className="text-sm text-white/70">
-                  Nova keeps your strategy, memory, and guardrails synced so you can chat like GPT—but inside PromptNX.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <Badge variant="secondary" className="bg-white/10 text-white border-white/20">
-                Model · {activeModel.label}
-              </Badge>
-              <Badge variant="outline" className="border-white/20 text-white/80">
-                Playbook · {activePlaybook.title}
-              </Badge>
-              <Badge variant="outline" className="border-white/20 text-white/70">
-                Latency {activeModel.latency}
-              </Badge>
-            </div>
-
-            <div className="grid gap-8">
-              <div className="space-y-3">
-                <p className="text-xs uppercase tracking-[0.35em] text-white/40 text-center">Model routing</p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {MODEL_PRESETS.map((model) => (
-                    <button
-                      key={model.id}
-                      type="button"
-                      disabled={model.status === "locked"}
-                      onClick={() => model.status !== "locked" && setSelectedModelId(model.id)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
-                        selectedModelId === model.id
-                          ? "bg-white text-black border-white"
-                          : "border-white/20 text-white/70 hover:border-white/60"
-                      } ${model.status === "locked" ? "opacity-50 cursor-not-allowed" : ""}`}
+                <div
+                  className={`flex gap-3 max-w-[80%] ${
+                    message.role === "user" ? "flex-row-reverse" : ""
+                  }`}
+                >
+                  {/* Avatar */}
+                  <Avatar className="h-8 w-8 flex-shrink-0">
+                    <AvatarFallback
+                      className={
+                        message.role === "user"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-white/10 text-white"
+                      }
                     >
-                      {model.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                      {message.role === "user" ? (
+                        userInitials
+                      ) : (
+                        <Bot className="h-4 w-4" />
+                      )}
+                    </AvatarFallback>
+                  </Avatar>
 
-              <div className="space-y-3">
-                <p className="text-xs uppercase tracking-[0.35em] text-white/40 text-center">Assistant lens</p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {STRATEGY_PLAYBOOKS.map((playbook) => (
-                    <button
-                      key={playbook.id}
-                      type="button"
-                      onClick={() => setSelectedPlaybookId(playbook.id)}
-                      className={`px-4 py-2 rounded-full border text-sm transition-colors ${
-                        activePlaybook.id === playbook.id
-                          ? "border-primary/70 bg-primary/15 text-white"
-                          : "border-white/15 text-white/70 hover:border-white/40"
-                      }`}
-                    >
-                      {playbook.title}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </header>
-
-          <section className="space-y-5">
-            <div className="rounded-[32px] border border-white/10 bg-white/[0.02] backdrop-blur-2xl shadow-[0_25px_80px_rgba(0,0,0,0.45)] flex flex-col min-h-[70vh] max-w-3xl mx-auto w-full">
-              <div className="px-6 py-4 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.4em] text-white/40">Nova session</p>
-                  <p className="text-sm text-white/70">Realtime memory • Guardrails ON</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="bg-emerald-500/15 text-emerald-300 border-0">
-                    Live
-                  </Badge>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-white/70 hover:text-white"
-                    onClick={handleResetThread}
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Reset
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 space-y-5">
-                {messages.map((message) => (
-                  <motion.div
-                    key={message.id}
-                    layout
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.25, ease: "easeOut" }}
-                    className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-                  >
+                  {/* Message Content */}
+                  <div className="flex flex-col gap-1">
                     <div
-                      className={`flex items-start gap-3 max-w-3xl ${
-                        message.role === "user" ? "flex-row-reverse text-right" : ""
+                      className={`rounded-2xl px-4 py-3 ${
+                        message.role === "user"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-white/5 text-white/90 border border-white/10"
+                      } ${
+                        chatSettings.compactMode ? "px-3 py-2" : ""
                       }`}
                     >
-                      <div
-                        className={`h-9 w-9 rounded-full border border-white/10 flex items-center justify-center text-xs font-semibold ${
-                          message.role === "user"
-                            ? "bg-primary/90 text-primary-foreground"
-                            : "bg-white/10 text-white"
-                        }`}
-                      >
-                        {message.role === "user" ? userInitials : "NV"}
-                      </div>
-                      <div
-                        className={`rounded-3xl border px-5 py-4 text-sm leading-relaxed shadow-lg whitespace-pre-wrap ${
-                          message.role === "user"
-                            ? "bg-primary text-primary-foreground border-primary/40"
-                            : "bg-white/5 border-white/10 text-white/90"
-                        }`}
-                      >
+                      {message.status === "streaming" ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span className="text-sm">Thinking...</span>
+                        </div>
+                      ) : (
                         <div
-                          className={`flex text-[11px] uppercase tracking-wide mb-2 opacity-70 ${
-                            message.role === "user" ? "justify-end gap-2" : "justify-between"
+                          className={`leading-relaxed ${
+                            chatSettings.fontSize === "small"
+                              ? "text-xs"
+                              : chatSettings.fontSize === "large"
+                              ? "text-base"
+                              : "text-sm"
                           }`}
                         >
-                          <span>{message.role === "user" ? userHandle : "Nova"}</span>
-                          <span>
-                            {new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          </span>
+                          {renderMessageContent(message.content)}
                         </div>
-                        <p>{message.content}</p>
-                        {message.status === "streaming" && (
-                          <div className="flex items-center gap-2 text-xs mt-3 opacity-80">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            Nova is composing
-                          </div>
-                        )}
-                        {message.latencyMs && (
-                          <p className="text-[11px] mt-3 opacity-70">
-                            {Math.round(message.latencyMs)} ms • {message.tokens?.completion ?? 0} completion tokens
-                          </p>
-                        )}
-                      </div>
+                      )}
                     </div>
+                    {hoveredMessageId === message.id && message.status !== "streaming" && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className={`flex gap-1 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                      >
+                        {message.role === "user" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-white/50 hover:text-white hover:bg-white/10"
+                            onClick={() => {
+                              setEditingMessageId(message.id)
+                              setEditMessageContent(message.content)
+                            }}
+                            title="Edit message"
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-white/50 hover:text-white hover:bg-white/10"
+                          onClick={() => handleCopyMessage(message.content, message.id)}
+                          title="Copy message"
+                        >
+                          {copiedMessageId === message.id ? (
+                            <Check className="h-3.5 w-3.5" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
+                      </motion.div>
+                    )}
+                    
+                    {/* Edit Message Input */}
+                    {editingMessageId === message.id && message.role === "user" && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10"
+                      >
+                        <textarea
+                          value={editMessageContent}
+                          onChange={(e) => setEditMessageContent(e.target.value)}
+                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          rows={3}
+                          autoFocus
+                        />
+                        <div className="flex gap-2 mt-2">
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setConversations((prev) =>
+                                prev.map((conv) =>
+                                  conv.id === activeConversationId
+                                    ? {
+                                        ...conv,
+                                        messages: conv.messages.map((msg) =>
+                                          msg.id === message.id
+                                            ? { ...msg, content: editMessageContent }
+                                            : msg
+                                        )
+                                      }
+                                    : conv
+                                )
+                              )
+                              setEditingMessageId(null)
+                              setEditMessageContent("")
+                              toast({
+                                title: "Message updated",
+                                description: "Your message has been edited."
+                              })
+                            }}
+                            className="h-7 px-3"
+                          >
+                            <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                            Save
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditingMessageId(null)
+                              setEditMessageContent("")
+                            }}
+                            className="h-7 px-3"
+                          >
+                            <XCircle className="h-3.5 w-3.5 mr-1" />
+                            Cancel
+                          </Button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Professional Chat Input Bar */}
+        <div className="border-t border-white/10 bg-gradient-to-b from-[#0a0d14] to-[#05070e] backdrop-blur-sm">
+          <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto p-4">
+            {/* Attached Files Preview */}
+            {attachedFiles.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-3 flex flex-wrap gap-2"
+              >
+                {attachedFiles.map((file, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ scale: 0.8 }}
+                    animate={{ scale: 1 }}
+                    className="flex items-center gap-2 px-3 py-2 bg-white/10 rounded-lg border border-white/20 backdrop-blur-sm"
+                  >
+                    <FileText className="h-4 w-4 text-primary" />
+                    <span className="text-xs text-white/90 truncate max-w-[150px] font-medium">
+                      {file.name}
+                    </span>
+                    <span className="text-xs text-white/50">
+                      ({(file.size / 1024).toFixed(1)} KB)
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 text-white/50 hover:text-red-400 hover:bg-red-500/10"
+                      onClick={() => {
+                        setAttachedFiles(attachedFiles.filter((_, i) => i !== index))
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
                   </motion.div>
                 ))}
-                <div ref={endOfMessagesRef} />
-              </div>
+              </motion.div>
+            )}
 
-              <div className="border-t border-white/5 bg-black/40 px-3 py-5 sm:px-6 space-y-4">
-                <div className="space-y-1 text-xs text-white/60">
-                  {CONVERSATION_SUGGESTIONS.map((prompt) => (
-                    <p key={prompt}>{prompt}</p>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {QUICK_PROMPTS.map((prompt) => (
-                    <Button
-                      key={prompt.id}
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full border-white/20 text-white/70 hover:text-white hover:border-white/60"
-                      onClick={() => insertQuickPrompt(prompt.detail)}
-                    >
-                      {prompt.title}
-                    </Button>
-                  ))}
-                </div>
-                <div className="rounded-full border border-white/15 bg-black/50 px-4 py-3 flex items-center gap-3 shadow-[0_15px_45px_rgba(0,0,0,0.45)]">
-                  <button
+            {/* Main Input Container */}
+            <div className="relative bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-2 shadow-lg shadow-black/20">
+              <div className="flex items-end gap-2">
+                {/* Left Action Buttons */}
+                <div className="flex items-center gap-1 px-1">
+                  {/* File Attachment */}
+                  <input
+                    type="file"
+                    id="file-input"
+                    className="hidden"
+                    multiple
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || [])
+                      setAttachedFiles([...attachedFiles, ...files])
+                    }}
+                  />
+                  <Button
                     type="button"
-                    className="h-10 w-10 rounded-full bg-white/10 text-white flex items-center justify-center border border-white/10"
-                    onClick={() => setComposerValue("")}
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all"
+                    onClick={() => document.getElementById("file-input")?.click()}
+                    title="Attach file"
                   >
-                    <Plus className="h-4 w-4" />
-                  </button>
+                    <Paperclip className="h-4 w-4" />
+                  </Button>
+
+                  {/* Image Upload */}
+                  <input
+                    type="file"
+                    id="image-input"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || [])
+                      setAttachedFiles([...attachedFiles, ...files])
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all"
+                    onClick={() => document.getElementById("image-input")?.click()}
+                    title="Attach image"
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                  </Button>
+
+                  {/* Emoji Picker */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all"
+                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    title="Add emoji"
+                  >
+                    <Smile className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {/* Text Input Area */}
+                <div className="flex-1 relative">
                   <textarea
-                    ref={composerRef}
-                    value={composerValue}
-                    onChange={(event) => setComposerValue(event.target.value)}
-                    placeholder="Ask NOVA anything…"
-                    rows={1}
-                    className="flex-1 bg-transparent border-none outline-none text-base placeholder:text-white/60 resize-none"
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault()
+                    ref={inputRef}
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault()
                         handleSendMessage()
                       }
                     }}
+                    placeholder="Type your message to NOVA..."
+                    rows={1}
+                    className="w-full bg-transparent border-none rounded-lg px-4 py-3 pr-20 text-sm text-white placeholder:text-white/40 resize-none focus:outline-none"
+                    style={{ maxHeight: "200px", minHeight: "48px" }}
+                    disabled={isSending}
                   />
-                  <button type="button" className="text-white/60 hover:text-white">
-                    <Mic className="h-5 w-5" />
-                  </button>
-                  <button type="button" className="text-white/60 hover:text-white">
-                    <AudioLines className="h-5 w-5" />
-                  </button>
+                  
+                  {/* Prompt Enhancement Button (inside input) */}
+                  {messageInput.trim() && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleEnhancePrompt}
+                      disabled={isEnhancingPrompt || isSending}
+                      className="absolute right-12 top-1/2 -translate-y-1/2 h-7 w-7 text-white/50 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
+                      title="Enhance prompt"
+                    >
+                      {isEnhancingPrompt ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Wand2 className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  )}
+                </div>
+
+                {/* Right Action Buttons */}
+                <div className="flex items-center gap-1 px-1">
+                  {/* Voice Input */}
                   <Button
-                    onClick={handleSendMessage}
-                    disabled={isSending || !composerValue.trim()}
-                    className="rounded-full h-11 w-11 p-0"
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className={`h-9 w-9 rounded-lg transition-all ${
+                      isRecording
+                        ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 animate-pulse"
+                        : "text-white/60 hover:text-white hover:bg-white/10"
+                    }`}
+                    onClick={() => {
+                      setIsRecording(!isRecording)
+                      toast({
+                        title: isRecording ? "Recording stopped" : "Recording started",
+                        description: isRecording
+                          ? "Voice input stopped"
+                          : "Voice input is ready (Feature coming soon)"
+                      })
+                    }}
+                    title="Voice input"
+                  >
+                    <Mic className="h-4 w-4" />
+                  </Button>
+
+                  {/* Send Button */}
+                  <Button
+                    type="submit"
+                    disabled={(!messageInput.trim() && attachedFiles.length === 0) || isSending}
+                    size="icon"
+                    className="h-9 w-9 rounded-lg bg-primary hover:bg-primary/90 text-white flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20 transition-all hover:scale-105"
                   >
                     {isSending ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -598,47 +979,98 @@ const CONVERSATION_SUGGESTIONS = [
                     )}
                   </Button>
                 </div>
-                <AnimatePresence>
-                  {errorMessage && (
-                    <motion.p
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -4 }}
-                      className="text-sm text-red-400"
-                    >
-                      {errorMessage}
-                    </motion.p>
+              </div>
+
+              {/* Emoji Picker Dropdown */}
+              {showEmojiPicker && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="absolute bottom-full left-0 mb-2 p-3 bg-white/10 backdrop-blur-md rounded-xl border border-white/20 max-h-48 overflow-y-auto shadow-2xl"
+                >
+                <div className="grid grid-cols-8 gap-2">
+                  {["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗", "🤔", "🤭", "🤫", "🤥", "😶", "😐", "😑", "😬", "🙄", "😯", "😦", "😧", "😮", "😲", "🥱", "😴", "🤤", "😪", "😵", "🤐", "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕"].map(
+                    (emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => {
+                          setMessageInput(messageInput + emoji)
+                          setShowEmojiPicker(false)
+                        }}
+                        className="text-2xl hover:scale-125 transition-transform p-1"
+                      >
+                        {emoji}
+                      </button>
+                    )
                   )}
-                </AnimatePresence>
-                <p className="text-xs text-white/50 flex items-center gap-2">
-                  Enter to send • Shift + Enter for a new line
-                  {isSending && (
-                    <span className="inline-flex items-center gap-1 text-emerald-300">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Nova thinking
+                </div>
+              </motion.div>
+            )}
+
+              {/* Helper Text */}
+              <div className="flex items-center justify-between mt-2 px-2">
+                <div className="flex items-center gap-3 text-xs text-white/50">
+                  {attachedFiles.length > 0 && (
+                    <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5">
+                      <Paperclip className="h-3 w-3" />
+                      {attachedFiles.length} file{attachedFiles.length > 1 ? "s" : ""}
                     </span>
                   )}
-                </p>
+                  {messageInput.trim() && (
+                    <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary/10 text-primary">
+                      <Wand2 className="h-3 w-3" />
+                      Enhance available
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-4 text-xs text-white/40">
+                  <kbd className="px-2 py-1 rounded bg-white/5 border border-white/10">Enter</kbd>
+                  <span>to send</span>
+                  <kbd className="px-2 py-1 rounded bg-white/5 border border-white/10">Shift + Enter</kbd>
+                  <span>for new line</span>
+                </div>
               </div>
             </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 flex flex-wrap items-center justify-center gap-4 text-xs text-white/70">
-              <div className="flex items-center gap-2">
-                <Shield className="h-4 w-4 text-emerald-300" />
-                Safety filters active
-              </div>
-              <div className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-amber-300" />
-                {sessionMeta.turns} turns • {Math.round(sessionMeta.avgLatency)}ms avg
-              </div>
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                {sessionMeta.tokens.total} tokens processed
-              </div>
-            </div>
-          </section>
+          </form>
         </div>
       </div>
+
+      {/* Chat Settings Modal */}
+      <ChatSettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        settings={chatSettings}
+        onSettingsChange={setChatSettings}
+      />
+
+      {/* NOVA Profile Panel */}
+      <NovaProfilePanel
+        open={novaProfileOpen}
+        onClose={() => setNovaProfileOpen(false)}
+        onSettingsClick={() => {
+          setNovaProfileOpen(false)
+          setSettingsOpen(true)
+        }}
+      />
+
+      {/* Search Modal */}
+      <ChatSearchModal
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        conversations={conversations.map((c) => ({
+          id: c.id,
+          title: c.title,
+          updatedAt: c.updatedAt
+        }))}
+        onSelectConversation={setActiveConversationId}
+      />
+
+      {/* Notifications Panel */}
+      <NotificationsPanel
+        open={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+      />
     </div>
   )
 }

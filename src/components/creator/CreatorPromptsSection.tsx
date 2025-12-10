@@ -10,8 +10,8 @@ import {
   where, 
   orderBy,
   getDocs
-} from "firebase/firestore"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
+} from "@/lib/platformStubs/firestore"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
 import { 
   FileText,
   Search,
@@ -55,7 +55,7 @@ export function CreatorPromptsSection({ creatorId }: CreatorPromptsSectionProps)
 
   // Load creator's prompts
   const loadPrompts = async () => {
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - show mock data
       loadMockPrompts()
       return
@@ -64,7 +64,7 @@ export function CreatorPromptsSection({ creatorId }: CreatorPromptsSectionProps)
     try {
       setLoading(true)
 
-      const promptsRef = collection(firebaseDb, 'prompts')
+      const promptsRef = collection(platformDb, 'prompts')
       const promptsQuery = query(
         promptsRef,
         where('uid', '==', creatorId),

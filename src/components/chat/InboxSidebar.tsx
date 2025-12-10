@@ -8,16 +8,6 @@ import { useAuth } from "@/context/AuthContext"
 import { useGuestChat } from "@/context/GuestChatContext"
 import { useToast } from "@/hooks/use-toast"
 import { 
-  collection, 
-  query, 
-  where, 
-  orderBy, 
-  onSnapshot,
-  getDocs,
-  doc
-} from "firebase/firestore"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
-import { 
   MessageCircle,
   Loader2,
   RefreshCw,
@@ -40,109 +30,46 @@ interface Conversation {
     avatar?: string
   }
   unreadCount?: number
+  starred?: boolean
+  archived?: boolean
 }
 
 interface InboxSidebarProps {
-  onConversationSelect: (conversationId: string) => void
+  onConversationSelect: (
+    conversationId: string,
+    otherParticipant?: {
+      uid: string
+      name: string
+      avatar?: string
+    }
+  ) => void
   selectedConversationId?: string
   searchQuery?: string
+  isDashboard?: boolean // If true, skip login prompts
+  filterMode?: "all" | "starred" | "archived"
 }
 
-export function InboxSidebar({ onConversationSelect, selectedConversationId, searchQuery = "" }: InboxSidebarProps) {
+export function InboxSidebar({
+  onConversationSelect,
+  selectedConversationId,
+  searchQuery = "",
+  isDashboard = false,
+  filterMode = "all"
+}: InboxSidebarProps) {
   const { currentUser } = useAuth()
+  // GuestChatProvider wraps messages pages, so this is safe
   const { guestUser } = useGuestChat()
   const { error } = useToast()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   
-  const canAccess = !!currentUser || !!guestUser
+  // In dashboard context, assume user is logged in
+  const canAccess = isDashboard ? !!currentUser : (!!currentUser || !!guestUser)
 
   // Load conversations
-  const loadConversations = async () => {
-    // Always show mock data in demo mode, even for guests
-    if (!isFirebaseConfigured || !firebaseDb) {
-      // Show mock conversations even if user is not logged in
-      loadMockConversations()
-      return
-    }
-
-    // For real Firebase, need authentication
-    if (!canAccess) {
-      setLoading(false)
-      // Still show empty state nicely
-      return
-    }
-
-    try {
-      setLoading(true)
-      setErrorMessage(null)
-
-      // Query conversations where current user is a participant
-      const conversationsRef = collection(firebaseDb, 'conversations')
-      const userId = currentUser?.uid || guestUser?.id
-      const conversationsQuery = query(
-        conversationsRef,
-        where('participants', 'array-contains', userId),
-        orderBy('updatedAt', 'desc')
-      )
-
-      const unsubscribe = onSnapshot(conversationsQuery, async (snapshot) => {
-        const conversationList: Conversation[] = []
-
-        const userId = currentUser?.uid || guestUser?.id
-        for (const doc of snapshot.docs) {
-          const data = doc.data()
-          const otherParticipantId = data.participants.find((uid: string) => uid !== userId)
-          
-          if (otherParticipantId) {
-            // Fetch other participant's info
-            let otherParticipant = {
-              uid: otherParticipantId,
-              name: "Unknown User",
-              avatar: ""
-            }
-
-            try {
-              const userQuery = query(
-                collection(firebaseDb, 'users'),
-                where('__name__', '==', otherParticipantId)
-              )
-              const userSnapshot = await getDocs(userQuery)
-              if (!userSnapshot.empty) {
-                const userData = userSnapshot.docs[0].data()
-                otherParticipant = {
-                  uid: otherParticipantId,
-                  name: userData.displayName || userData.email?.split('@')[0] || "Unknown User",
-                  avatar: userData.photoURL || ""
-                }
-              }
-            } catch (err) {
-              console.error('Error fetching user data:', err)
-            }
-
-            conversationList.push({
-              id: doc.id,
-              participants: data.participants,
-              lastMessage: data.lastMessage,
-              updatedAt: data.updatedAt,
-              otherParticipant,
-              unreadCount: 0 // TODO: Calculate unread count
-            })
-          }
-        }
-
-        setConversations(conversationList)
-        setLoading(false)
-      })
-
-      return unsubscribe
-    } catch (err: any) {
-      console.error('Error loading conversations:', err)
-      setErrorMessage(err.message || "Failed to load conversations")
-      error("Loading failed", "Failed to load conversations")
-      setLoading(false)
-    }
+  const loadConversations = () => {
+    loadMockConversations()
   }
 
   // Load mock data for demo mode
@@ -215,12 +142,43 @@ export function InboxSidebar({ onConversationSelect, selectedConversationId, sea
       }
     ]
     
-    setConversations(mockConversations)
+    // Merge with stored metadata (starred / archived)
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem("promptnx-chat-metadata")
+        if (raw) {
+          const meta = JSON.parse(raw) as Record<string, { starred?: boolean; archived?: boolean }>
+          const merged = mockConversations.map((conv) => {
+            const m = meta[conv.id]
+            return m ? { ...conv, starred: Boolean(m.starred), archived: Boolean(m.archived) } : conv
+          })
+          setConversations(merged)
+        } else {
+          setConversations(mockConversations)
+        }
+      } catch {
+        setConversations(mockConversations)
+      }
+    } else {
+      setConversations(mockConversations)
+    }
     setLoading(false)
   }
 
-  // Filter conversations by search query
+  // Filter conversations by search query and filter mode
   const filteredConversations = conversations.filter(conv => {
+    // Archived/starred filtering
+    if (filterMode === "archived") {
+      if (!conv.archived) return false
+    } else {
+      // Hide archived in normal / starred view
+      if (conv.archived) return false
+    }
+
+    if (filterMode === "starred" && !conv.starred) {
+      return false
+    }
+
     if (!searchQuery.trim()) return true
     const query = searchQuery.toLowerCase()
     return (
@@ -231,12 +189,7 @@ export function InboxSidebar({ onConversationSelect, selectedConversationId, sea
 
   // Load conversations on mount
   useEffect(() => {
-    const unsubscribe = loadConversations()
-    return () => {
-      if (unsubscribe) {
-        unsubscribe()
-      }
-    }
+    loadConversations()
   }, [currentUser, guestUser])
 
   const formatTime = (date: any) => {
@@ -301,7 +254,7 @@ export function InboxSidebar({ onConversationSelect, selectedConversationId, sea
   return (
     <div className="h-full">
       <div className="p-2">
-        {!canAccess ? (
+        {(!canAccess && !isDashboard) ? (
           <div className="py-16 text-center px-4">
             <MessageCircle className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">No conversations yet</p>
@@ -341,7 +294,7 @@ export function InboxSidebar({ onConversationSelect, selectedConversationId, sea
                         : 'hover:bg-muted/50 border-l-2 border-transparent'
                       }
                     `}
-                    onClick={() => onConversationSelect(conversation.id)}
+                    onClick={() => onConversationSelect(conversation.id, conversation.otherParticipant)}
                   >
                     <div className="flex items-center gap-3 w-full">
                       <div className="relative flex-shrink-0">

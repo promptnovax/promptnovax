@@ -12,6 +12,7 @@ import { useCart } from "@/context/CartContext"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useViewport } from "@/context/ViewportContext"
 
 interface PremiumNavbarProps { currentPage?: string }
 export function PremiumNavbar({ currentPage }: PremiumNavbarProps) {
@@ -32,10 +33,11 @@ export function PremiumNavbar({ currentPage }: PremiumNavbarProps) {
   const [productsOpen, setProductsOpen] = useState(false)
   const [resourcesOpen, setResourcesOpen] = useState(false)
   const [companyOpen, setCompanyOpen] = useState(false)
+  const { isMobile, safeAreaTop } = useViewport()
   
   return (
     <motion.header
-      style={{ height }}
+      style={{ height, paddingTop: safeAreaTop }}
       className="sticky top-0 z-40 border-b backdrop-blur supports-[backdrop-filter]:bg-background/60"
     >
       <motion.div style={{ boxShadow }} className="h-full">
@@ -52,10 +54,9 @@ export function PremiumNavbar({ currentPage }: PremiumNavbarProps) {
                <DropdownMenuContent align="start">
                  <DropdownMenuItem asChild><Link href="#studio/api">Prompt Studio</Link></DropdownMenuItem>
                  <DropdownMenuSub>
-                   <DropdownMenuSubTrigger>Generators</DropdownMenuSubTrigger>
+                    <DropdownMenuSubTrigger>Generators</DropdownMenuSubTrigger>
                    <DropdownMenuSubContent>
                      <DropdownMenuItem asChild><Link href="#prompt-generator">Prompt Generator</Link></DropdownMenuItem>
-                     <DropdownMenuItem asChild><Link href="#slides">Slides Generator</Link></DropdownMenuItem>
                      <DropdownMenuItem asChild><Link href="#generator">Form-based Generator</Link></DropdownMenuItem>
                      <DropdownMenuItem asChild><Link href="#chat">Chat-based Generator</Link></DropdownMenuItem>
                    </DropdownMenuSubContent>
@@ -98,7 +99,7 @@ export function PremiumNavbar({ currentPage }: PremiumNavbarProps) {
             {currentPage?.startsWith("marketplace") && (
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="ghost" className="relative" size="sm">
+                <Button variant="ghost" className="relative" size={isMobile ? "icon" : "sm"}>
                   <ShoppingCart className="h-4 w-4" />
                   {totalItems > 0 && (
                     <motion.span
@@ -262,30 +263,48 @@ export function PremiumNavbar({ currentPage }: PremiumNavbarProps) {
               </SheetContent>
             </Sheet>
             )}
-            {currentPage?.startsWith("marketplace") && (
-            <MagneticButton>
-              <Button variant="outline" className="relative overflow-hidden hover:shadow-[0_0_24px_rgba(88,101,242,0.35)]" asChild>
-                <Link href="#prompts/create">
-                  <span className="absolute -inset-px rounded-md bg-[radial-gradient(circle_at_center,theme(colors.primary/20),transparent_60%)] opacity-0 group-hover:opacity-60 transition-opacity" />
-                  <span className="relative">Create Prompt</span>
-                </Link>
-              </Button>
-            </MagneticButton>
+            {isMobile ? (
+              <>
+                {currentPage?.startsWith("marketplace") && (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="#prompts/create">Create</Link>
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="#login">Log In</Link>
+                </Button>
+                <Button size="sm" asChild>
+                  <Link href="#signup">Sign Up</Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                {currentPage?.startsWith("marketplace") && (
+                  <MagneticButton>
+                    <Button variant="outline" className="relative overflow-hidden hover:shadow-[0_0_24px_rgba(88,101,242,0.35)]" asChild>
+                      <Link href="#prompts/create">
+                        <span className="absolute -inset-px rounded-md bg-[radial-gradient(circle_at_center,theme(colors.primary/20),transparent_60%)] opacity-0 group-hover:opacity-60 transition-opacity" />
+                        <span className="relative">Create Prompt</span>
+                      </Link>
+                    </Button>
+                  </MagneticButton>
+                )}
+                <MagneticButton>
+                  <Button variant="ghost" className="relative overflow-hidden hover:shadow-[0_0_24px_rgba(88,101,242,0.25)]" asChild>
+                    <Link href="#login">
+                      <span className="absolute -inset-px rounded-md bg-[radial-gradient(circle_at_center,theme(colors.primary/15),transparent_60%)] opacity-0 group-hover:opacity-60 transition-opacity" />
+                      <span className="relative">Log In</span>
+                    </Link>
+                  </Button>
+                </MagneticButton>
+                <MagneticButton>
+                  <Button className="relative overflow-hidden hover:shadow-[0_0_28px_rgba(88,101,242,0.45)]">
+                    <span className="absolute -inset-px rounded-md bg-[radial-gradient(circle_at_center,theme(colors.primary/30),transparent_60%)] opacity-40" />
+                    <span className="relative">Sign Up</span>
+                  </Button>
+                </MagneticButton>
+              </>
             )}
-            <MagneticButton>
-              <Button variant="ghost" className="relative overflow-hidden hover:shadow-[0_0_24px_rgba(88,101,242,0.25)]" asChild>
-                <Link href="#login">
-                  <span className="absolute -inset-px rounded-md bg-[radial-gradient(circle_at_center,theme(colors.primary/15),transparent_60%)] opacity-0 group-hover:opacity-60 transition-opacity" />
-                  <span className="relative">Log In</span>
-                </Link>
-              </Button>
-            </MagneticButton>
-            <MagneticButton>
-              <Button className="relative overflow-hidden hover:shadow-[0_0_28px_rgba(88,101,242,0.45)]">
-                <span className="absolute -inset-px rounded-md bg-[radial-gradient(circle_at_center,theme(colors.primary/30),transparent_60%)] opacity-40" />
-                <span className="relative">Sign Up</span>
-              </Button>
-            </MagneticButton>
           </div>
         </div>
         {/* Mobile Nav */}

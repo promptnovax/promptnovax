@@ -25,18 +25,24 @@ export function InboxIndex() {
     avatar?: string
   } | undefined>()
   const [searchQuery, setSearchQuery] = useState("")
+  const [filterMode, setFilterMode] = useState<"all" | "starred" | "archived">("all")
 
   const canAccess = !!currentUser || !!guestUser
 
-  const handleConversationSelect = (conversationId: string) => {
+  const handleConversationSelect = (
+    conversationId: string,
+    otherParticipant?: {
+      uid: string
+      name: string
+      avatar?: string
+    }
+  ) => {
     setSelectedConversationId(conversationId)
-    // In a real app, you'd fetch the other participant's info here
-    // For now, we'll use mock data
-    setSelectedOtherParticipant({
-      uid: "user2",
-      name: "CodeMaster Pro",
-      avatar: "https://github.com/shadcn.png"
-    })
+    if (otherParticipant) {
+      setSelectedOtherParticipant(otherParticipant)
+    } else {
+      setSelectedOtherParticipant(undefined)
+    }
   }
 
   const handleBackToMarketplace = () => {
@@ -81,7 +87,12 @@ export function InboxIndex() {
               Messages
             </h2>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="h-9 w-9">
+              <Button
+                variant={filterMode === "archived" ? "default" : "ghost"}
+                size="icon"
+                className="h-9 w-9"
+                onClick={() => setFilterMode(filterMode === "archived" ? "all" : "archived")}
+              >
                 <Archive className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="icon" className="h-9 w-9">
@@ -109,6 +120,7 @@ export function InboxIndex() {
             onConversationSelect={handleConversationSelect}
             selectedConversationId={selectedConversationId}
             searchQuery={searchQuery}
+            filterMode={filterMode}
           />
         </div>
       </div>

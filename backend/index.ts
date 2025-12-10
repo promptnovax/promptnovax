@@ -1,11 +1,9 @@
 import dotenv from 'dotenv'
 dotenv.config()
-import express from 'express'
+import express, { Request } from 'express'
 import cors from 'cors'
 import { Resend } from 'resend'
 import axios from 'axios'
-import { initializeApp, cert, getApps, ServiceAccount } from 'firebase-admin/app'
-import { getFirestore } from 'firebase-admin/firestore'
 import { rateLimit, getClientIdentifier } from './utils/rateLimiter.js'
 import { getCache, setCache, generateCacheKey } from './utils/cache.js'
 import { validateExecuteRequest } from './utils/validators.js'
@@ -13,13 +11,14 @@ import { calculateCost, formatCost } from './utils/costCalculator.js'
 import { executeProviderRequest } from './utils/providerHandler.js'
 import { buildPromptBlueprint, estimatePromptScore } from './utils/promptGenerator.js'
 import { synthesizeLocalPrompt } from './utils/localPromptSynthesis.js'
+import { getSupabaseAdmin } from './lib/supabase.js'
+import type { Session, User } from '@supabase/supabase-js'
 
 // Env
 const PORT = process.env.PORT || 8787
 const RESEND_API_KEY = process.env.RESEND_API_KEY as string
 const RESEND_DOMAIN = process.env.RESEND_DOMAIN as string
 const SENDER_EMAIL = process.env.SENDER_EMAIL as string
-const SERVICE_ACCOUNT_JSON = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
 const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY || process.env.HF_API_KEY
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 const PROMPT_GENERATOR_PROVIDER = (process.env.PROMPT_GENERATOR_PROVIDER || 'huggingface').toLowerCase()
@@ -37,6 +36,213 @@ const DEFAULT_CHAT_SYSTEM_PROMPT = `You are PromptNX Copilot, a senior AI strate
 const PROMPT_GENERATOR_SYSTEM_PROMPT =
   process.env.PROMPT_GENERATOR_SYSTEM_PROMPT ||
   `You are PromptNX's elite prompt engineer. transform any instructions into a production-ready AI prompt with structure, scoring rubric, and implementation guidance.`
+
+type WorkflowStageId = 'briefing' | 'generation' | 'image' | 'chat-loop' | 'video'
+
+interface WorkflowStageInput {
+  id: WorkflowStageId
+  label?: string
+  type?: string
+  runtime?: string
+}
+
+interface StageResult {
+  id: WorkflowStageId
+  status: 'completed' | 'skipped' | 'failed'
+  summary: string
+  details?: string
+  outputType?: 'text' | 'image' | 'video'
+  payload?: any
+}
+
+const WORKFLOW_STAGE_IDS: WorkflowStageId[] = ['briefing', 'generation', 'image', 'chat-loop', 'video']
+
+function normalizeWorkflowStages(input: any): WorkflowStageInput[] {
+  const fallback: WorkflowStageInput[] = [
+    { id: 'briefing', label: 'Briefing + Guardrails', type: 'text', runtime: 'Prep' },
+    { id: 'generation', label: 'Primary Generation', type: 'text', runtime: 'Core' }
+  ]
+
+  if (!Array.isArray(input) || input.length === 0) {
+    return fallback
+  }
+
+  const cleaned = input
+    .map((stage) => ({
+      id: stage?.id,
+      label: stage?.label,
+      type: stage?.type,
+      runtime: stage?.runtime
+    }))
+    .filter((stage): stage is WorkflowStageInput => {
+      return Boolean(stage.id && WORKFLOW_STAGE_IDS.includes(stage.id))
+    })
+
+  return cleaned.length ? cleaned : fallback
+}
+
+function sortStageResults(stageResults: StageResult[], order: WorkflowStageId[]) {
+  return [...stageResults].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
+}
+
+async function handleImageStage({
+  provider,
+  apiKey,
+  prompt,
+  size,
+  quality,
+  style
+}: {
+  provider: string
+  apiKey: string
+  prompt: string
+  size?: string
+  quality?: string
+  style?: string
+}): Promise<StageResult> {
+  if (provider !== 'openai') {
+    return {
+      id: 'image',
+      status: 'skipped',
+      summary: 'Visual companion requires the OpenAI provider (DALL·E / GPT-Image).'
+    }
+  }
+
+  const payload: any = {
+    model: 'gpt-image-1',
+    prompt,
+    n: 1,
+    size: size || '1024x1024'
+  }
+  if (quality) payload.quality = quality
+  if (style) payload.style = style
+
+  const response = await executeProviderRequest({
+    url: 'https://api.openai.com/v1/images/generations',
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`
+    },
+    data: payload
+  })
+
+  const first = response?.data?.[0]
+  if (!first) {
+    throw new Error('OpenAI image endpoint returned an empty response')
+  }
+
+  const dataUrl = first.b64_json
+    ? `data:image/png;base64,${first.b64_json}`
+    : first.url
+
+  return {
+    id: 'image',
+    status: 'completed',
+    summary: `Generated companion visual (${payload.size})`,
+    outputType: 'image',
+    payload: {
+      url: first.url,
+      base64: first.b64_json,
+      source: dataUrl
+    }
+  }
+}
+
+async function handleChatLoopStage({
+  provider,
+  apiKey,
+  systemPrompt,
+  userPrompt,
+  assistantOutput,
+  temperature,
+  maxTokens
+}: {
+  provider: string
+  apiKey: string
+  systemPrompt?: string
+  userPrompt: string
+  assistantOutput?: string
+  temperature?: number
+  maxTokens?: number
+}): Promise<StageResult> {
+  if (!assistantOutput) {
+    return {
+      id: 'chat-loop',
+      status: 'failed',
+      summary: 'Chat loop requires a successful primary generation first.'
+    }
+  }
+
+  if (provider !== 'openai') {
+    return {
+      id: 'chat-loop',
+      status: 'skipped',
+      summary: 'Chat loop automation is currently available for OpenAI only.'
+    }
+  }
+
+  const messages = [
+    { role: 'system', content: systemPrompt || DEFAULT_CHAT_SYSTEM_PROMPT },
+    { role: 'user', content: userPrompt },
+    { role: 'assistant', content: assistantOutput },
+    {
+      role: 'user',
+      content: 'Continue the conversation with a concise follow-up question and one tactical suggestion.'
+    }
+  ]
+
+  const response = await executeProviderRequest({
+    url: 'https://api.openai.com/v1/chat/completions',
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`
+    },
+    data: {
+      model: 'gpt-4o-mini',
+      messages,
+      temperature: Math.min((temperature ?? 0.7) + 0.1, 1.2),
+      max_tokens: Math.min(maxTokens ?? 300, 500)
+    }
+  })
+
+  const chatContent = response?.choices?.[0]?.message?.content?.trim()
+  if (!chatContent) {
+    throw new Error('Chat loop returned an empty response')
+  }
+
+  return {
+    id: 'chat-loop',
+    status: 'completed',
+    summary: 'Follow-up turn generated',
+    outputType: 'text',
+    payload: {
+      text: chatContent
+    }
+  }
+}
+
+function buildVideoStageResult(provider: string, result: any): StageResult {
+  if (provider !== 'replicate') {
+    return {
+      id: 'video',
+      status: 'skipped',
+      summary: 'Motion Layer currently requires the Replicate provider.'
+    }
+  }
+
+  const videoUrl = result?.data?.output?.[0] || result?.data?.urls?.get
+
+  return {
+    id: 'video',
+    status: result?.type === 'video' ? 'completed' : 'skipped',
+    summary: 'Video prediction requested via Replicate.',
+    outputType: 'video',
+    payload: {
+      url: videoUrl,
+      raw: result?.data
+    }
+  }
+}
 
 type ChatRole = 'user' | 'assistant' | 'system'
 interface IncomingChatMessage {
@@ -56,27 +262,1070 @@ if (PROMPT_GENERATOR_PROVIDER === 'openrouter' && !OPENROUTER_API_KEY) {
   console.warn('OPENROUTER_API_KEY missing - OpenRouter powered endpoints will fail until configured')
 }
 
-// Firebase Admin init (server-only)
-let db: any = null
-if (!getApps().length && SERVICE_ACCOUNT_JSON) {
-  try {
-    const serviceAccount = JSON.parse(SERVICE_ACCOUNT_JSON) as ServiceAccount
-    initializeApp({ credential: cert(serviceAccount) })
-    db = getFirestore()
-    console.log('Firebase Admin initialized successfully')
-  } catch (error) {
-    console.error('Firebase Admin initialization failed:', error)
-    console.warn('OTP functionality will be limited without Firebase')
-  }
-} else {
-  console.warn('Firebase service account not provided - OTP functionality will be limited')
-}
+const otpStore = new Map<string, { code: string; expiresAt: number; attempts: number }>()
 
 const app = express()
 app.use(cors())
 app.use(express.json())
 
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
+const supabaseAdmin = (() => {
+  try {
+    return getSupabaseAdmin()
+  } catch (error) {
+    console.warn('Supabase admin client unavailable; DB-backed routes disabled.')
+    return null
+  }
+})()
+
+type AuthEventType =
+  | 'signup'
+  | 'login'
+  | 'logout'
+  | 'password_reset_request'
+  | 'password_reset'
+  | 'token_refresh'
+
+type AuthUserRole = 'buyer' | 'seller'
+
+const PASSWORD_RESET_REDIRECT =
+  process.env.AUTH_PASSWORD_RESET_REDIRECT ||
+  `${process.env.APP_URL || 'http://localhost:5173'}/reset-password`
+
+function normalizeRole(role?: string | null): AuthUserRole {
+  return role === 'seller' ? 'seller' : 'buyer'
+}
+
+function mapAuthUser(user: User | null) {
+  if (!user) return null
+  return {
+    id: user.id,
+    email: user.email,
+    role: normalizeRole((user.user_metadata as any)?.role),
+    displayName:
+      (user.user_metadata as any)?.display_name ||
+      (user.user_metadata as any)?.full_name ||
+      user.email?.split('@')[0] ||
+      null,
+    avatarUrl: (user.user_metadata as any)?.avatar_url || null,
+    createdAt: user.created_at
+  }
+}
+
+async function upsertProfileFromUser(user: User, role: AuthUserRole, displayName?: string) {
+  if (!supabaseAdmin) return
+  try {
+    const fallbackUsername = user.email?.split('@')[0]?.replace(/[^a-zA-Z0-9]/g, '')?.toLowerCase()
+    const profilePayload: Record<string, any> = {
+      id: user.id,
+      role,
+      username: (user.user_metadata as any)?.username || fallbackUsername,
+      display_name:
+        displayName ||
+        (user.user_metadata as any)?.display_name ||
+        (user.user_metadata as any)?.full_name,
+      avatar_url: (user.user_metadata as any)?.avatar_url,
+      metadata: (user.user_metadata as any)?.metadata || {}
+    }
+    Object.keys(profilePayload).forEach((key) => {
+      if (profilePayload[key] === undefined) {
+        delete profilePayload[key]
+      }
+    })
+    await supabaseAdmin.from('profiles').upsert(profilePayload, { onConflict: 'id' })
+
+    if (role === 'seller') {
+      const sellerPayload: Record<string, any> = {
+        seller_id: user.id,
+        headline: profilePayload.display_name || profilePayload.username,
+        verification_status: 'unverified'
+      }
+      Object.keys(sellerPayload).forEach((key) => {
+        if (sellerPayload[key] === undefined) {
+          delete sellerPayload[key]
+        }
+      })
+      await supabaseAdmin.from('seller_profiles').upsert(sellerPayload, { onConflict: 'seller_id' })
+    }
+  } catch (error) {
+    console.warn('[Auth] Failed to sync profile after auth event', error)
+  }
+}
+
+async function logAuthEvent({
+  eventType,
+  request,
+  success,
+  userId,
+  errorCode,
+  metadata
+}: {
+  eventType: AuthEventType
+  request?: Request
+  userId?: string
+  success: boolean
+  errorCode?: string
+  metadata?: Record<string, any>
+}) {
+  if (!supabaseAdmin) return
+  try {
+    await supabaseAdmin.from('auth_events').insert({
+      user_id: userId ?? null,
+      event_type: eventType,
+      success,
+      error_code: errorCode || null,
+      metadata: metadata || {},
+      ip_address: request?.ip || null,
+      user_agent: request?.get('user-agent') || null
+    })
+  } catch (error) {
+    console.warn('[Auth] Failed to log auth event', error)
+  }
+}
+
+async function persistSessionRecord({
+  session,
+  userId,
+  request
+}: {
+  session: Session | null
+  userId: string
+  request?: Request
+}) {
+  if (!supabaseAdmin || !session) return null
+  try {
+    const expiresAt =
+      session.expires_at && !Number.isNaN(session.expires_at)
+        ? new Date(session.expires_at * 1000).toISOString()
+        : session.expires_in
+        ? new Date(Date.now() + session.expires_in * 1000).toISOString()
+        : new Date(Date.now() + 3600 * 1000).toISOString()
+
+    const { data, error } = await supabaseAdmin
+      .from('user_sessions')
+      .insert({
+        user_id: userId,
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        expires_at: expiresAt,
+        ip_address: request?.ip || null,
+        user_agent: request?.get('user-agent') || null
+      })
+      .select('id')
+      .single()
+
+    if (error) throw error
+    return data?.id ?? null
+  } catch (error) {
+    console.warn('[Auth] Failed to persist session record', error)
+    return null
+  }
+}
+
+async function revokeSessionRecord({
+  sessionId,
+  userId
+}: {
+  sessionId?: string
+  userId?: string
+}) {
+  if (!supabaseAdmin) return
+  if (!sessionId && !userId) return
+  try {
+    const query = supabaseAdmin
+      .from('user_sessions')
+      .update({ revoked_at: new Date().toISOString() })
+      .is('revoked_at', null)
+    if (sessionId) {
+      await query.eq('id', sessionId)
+    } else if (userId) {
+      await query.eq('user_id', userId)
+    }
+  } catch (error) {
+    console.warn('[Auth] Failed to revoke session record', error)
+  }
+}
+
+// Auth endpoints --------------------------------------------------------------
+app.post('/api/auth/signup', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Supabase not configured on server' })
+  }
+
+  try {
+    const { email, password, role = 'buyer', displayName } = req.body as {
+      email?: string
+      password?: string
+      role?: AuthUserRole
+      displayName?: string
+    }
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' })
+    }
+
+    const normalizedRole = normalizeRole(role)
+
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        role: normalizedRole,
+        display_name: displayName
+      }
+    })
+
+    if (error || !data.user) {
+      await logAuthEvent({
+        eventType: 'signup',
+        request: req,
+        success: false,
+        errorCode: error?.message,
+        metadata: { email }
+      })
+      return res.status(400).json({ error: error?.message || 'Failed to create account' })
+    }
+
+    await upsertProfileFromUser(data.user, normalizedRole, displayName)
+    await logAuthEvent({
+      eventType: 'signup',
+      request: req,
+      success: true,
+      userId: data.user.id,
+      metadata: { role: normalizedRole }
+    })
+
+    res.status(201).json({ user: mapAuthUser(data.user) })
+  } catch (error: any) {
+    console.error('[Auth] signup failed', error)
+    res.status(500).json({ error: 'Failed to create account' })
+  }
+})
+
+app.post('/api/auth/login', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Supabase not configured on server' })
+  }
+
+  try {
+    const { email, password } = req.body as { email?: string; password?: string }
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' })
+    }
+
+    const { data, error } = await supabaseAdmin.auth.signInWithPassword({ email, password })
+
+    if (error || !data.user) {
+      await logAuthEvent({
+        eventType: 'login',
+        request: req,
+        success: false,
+        errorCode: error?.message,
+        metadata: { email }
+      })
+      return res.status(401).json({ error: error?.message || 'Invalid credentials' })
+    }
+
+    const normalizedRole = normalizeRole((data.user.user_metadata as any)?.role)
+    await upsertProfileFromUser(data.user, normalizedRole)
+
+    if (!data.session) {
+      await logAuthEvent({
+        eventType: 'login',
+        request: req,
+        success: true,
+        userId: data.user.id,
+        metadata: { requiresEmailConfirmation: true }
+      })
+      return res.status(202).json({
+        user: mapAuthUser(data.user),
+        session: null,
+        message: 'Email confirmation required before login completes.'
+      })
+    }
+
+    const sessionId = await persistSessionRecord({
+      session: data.session,
+      userId: data.user.id,
+      request: req
+    })
+
+    await logAuthEvent({
+      eventType: 'login',
+      request: req,
+      success: true,
+      userId: data.user.id
+    })
+
+    res.json({
+      user: mapAuthUser(data.user),
+      session: {
+        id: sessionId,
+        accessToken: data.session.access_token,
+        refreshToken: data.session.refresh_token,
+        expiresAt:
+          data.session.expires_at && !Number.isNaN(data.session.expires_at)
+            ? new Date(data.session.expires_at * 1000).toISOString()
+            : null
+      }
+    })
+  } catch (error: any) {
+    console.error('[Auth] login failed', error)
+    res.status(500).json({ error: 'Failed to login' })
+  }
+})
+
+app.post('/api/auth/logout', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Supabase not configured on server' })
+  }
+
+  try {
+    const { userId, sessionId } = req.body as { userId?: string; sessionId?: string }
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required to logout' })
+    }
+
+    const { error } = await supabaseAdmin.auth.admin.signOut(userId)
+    if (error) {
+      await logAuthEvent({
+        eventType: 'logout',
+        request: req,
+        success: false,
+        userId,
+        errorCode: error.message
+      })
+      return res.status(500).json({ error: 'Failed to sign out user' })
+    }
+
+    await revokeSessionRecord({ sessionId, userId })
+    await logAuthEvent({
+      eventType: 'logout',
+      request: req,
+      success: true,
+      userId
+    })
+
+    res.json({ success: true })
+  } catch (error: any) {
+    console.error('[Auth] logout failed', error)
+    res.status(500).json({ error: 'Failed to logout user' })
+  }
+})
+
+app.post('/api/auth/refresh', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Supabase not configured on server' })
+  }
+
+  try {
+    const { refreshToken } = req.body as { refreshToken?: string }
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'refreshToken is required' })
+    }
+
+    const { data, error } = await supabaseAdmin.auth.refreshSession({ refresh_token: refreshToken })
+    if (error || !data.session || !data.user) {
+      await logAuthEvent({
+        eventType: 'token_refresh',
+        request: req,
+        success: false,
+        errorCode: error?.message
+      })
+      return res.status(401).json({ error: error?.message || 'Failed to refresh session' })
+    }
+
+    const sessionId = await persistSessionRecord({
+      session: data.session,
+      userId: data.user.id,
+      request: req
+    })
+
+    await logAuthEvent({
+      eventType: 'token_refresh',
+      request: req,
+      success: true,
+      userId: data.user.id
+    })
+
+    res.json({
+      user: mapAuthUser(data.user),
+      session: {
+        id: sessionId,
+        accessToken: data.session.access_token,
+        refreshToken: data.session.refresh_token,
+        expiresAt:
+          data.session.expires_at && !Number.isNaN(data.session.expires_at)
+            ? new Date(data.session.expires_at * 1000).toISOString()
+            : null
+      }
+    })
+  } catch (error: any) {
+    console.error('[Auth] refresh failed', error)
+    res.status(500).json({ error: 'Failed to refresh session' })
+  }
+})
+
+app.post('/api/auth/password/reset', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Supabase not configured on server' })
+  }
+
+  try {
+    const { email, redirectTo } = req.body as { email?: string; redirectTo?: string }
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' })
+    }
+
+    const { error } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectTo || PASSWORD_RESET_REDIRECT
+    })
+
+    if (error) {
+      await logAuthEvent({
+        eventType: 'password_reset_request',
+        request: req,
+        success: false,
+        errorCode: error.message,
+        metadata: { email }
+      })
+      return res.status(500).json({ error: 'Failed to send password reset email' })
+    }
+
+    await logAuthEvent({
+      eventType: 'password_reset_request',
+      request: req,
+      success: true,
+      metadata: { email }
+    })
+
+    res.json({ success: true })
+  } catch (error: any) {
+    console.error('[Auth] password reset request failed', error)
+    res.status(500).json({ error: 'Failed to process password reset request' })
+  }
+})
+// GET /api/profiles/:id - hydrate profile + seller info
+app.get('/api/profiles/:id', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Supabase not configured on server' })
+  }
+
+  try {
+    const { id } = req.params
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (profileError) {
+      return res.status(404).json({ error: 'Profile not found' })
+    }
+
+    const { data: sellerProfile } = await supabaseAdmin
+      .from('seller_profiles')
+      .select('*')
+      .eq('seller_id', id)
+      .maybeSingle()
+
+    res.json({ profile, sellerProfile })
+  } catch (error: any) {
+    console.error('[Profiles] failed to fetch profile', error)
+    res.status(500).json({ error: 'Failed to fetch profile' })
+  }
+})
+
+// GET /api/prompts - public marketplace feed
+app.get('/api/prompts', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Supabase not configured on server' })
+  }
+
+  try {
+    const limit = Math.min(Number(req.query.limit) || 20, 100)
+    const statusFilter = (req.query.status as string) || 'live'
+    const search = (req.query.search as string) || ''
+
+    let query = supabaseAdmin
+      .from('prompts')
+      .select('*')
+      .eq('visibility', 'public')
+      .order('published_at', { ascending: false })
+      .limit(limit)
+
+    if (statusFilter) {
+      query = query.eq('status', statusFilter)
+    }
+
+    if (search) {
+      query = query.ilike('title', `%${search}%`)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throw error
+    }
+
+    res.json({ prompts: data ?? [] })
+  } catch (error: any) {
+    console.error('[Prompts] failed to fetch marketplace prompts', error)
+    res.status(500).json({ error: 'Failed to load prompts' })
+  }
+})
+
+// GET /api/sellers/:id/dashboard - aggregated seller dashboard data
+app.get('/api/sellers/:id/dashboard', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Supabase not configured on server' })
+  }
+
+  try {
+    const { id: sellerId } = req.params
+
+    const [
+      { data: profile, error: profileError },
+      { data: sellerProfile, error: sellerProfileError },
+      { data: prompts, error: promptsError },
+      { data: orderItems, error: orderItemsError },
+      { data: reviews, error: reviewsError },
+      { data: notifications, error: notificationsError }
+    ] = await Promise.all([
+      supabaseAdmin.from('profiles').select('*').eq('id', sellerId).maybeSingle(),
+      supabaseAdmin.from('seller_profiles').select('*').eq('seller_id', sellerId).maybeSingle(),
+      supabaseAdmin
+        .from('prompts')
+        .select('*')
+        .eq('seller_id', sellerId)
+        .order('updated_at', { ascending: false }),
+      supabaseAdmin
+        .from('order_items')
+        .select('id,order_id,prompt_id,price_cents,seller_earnings_cents,created_at')
+        .eq('seller_id', sellerId)
+        .order('created_at', { ascending: false }),
+      supabaseAdmin
+        .from('prompt_reviews')
+        .select('id,prompt_id,buyer_id,rating,comment,created_at,status')
+        .eq('status', 'published')
+        .order('created_at', { ascending: false })
+        .limit(25),
+      supabaseAdmin
+        .from('notifications')
+        .select('*')
+        .eq('user_id', sellerId)
+        .order('created_at', { ascending: false })
+        .limit(10)
+    ])
+
+    if (profileError) throw profileError
+    if (sellerProfileError && sellerProfileError.code !== 'PGRST116') throw sellerProfileError
+    if (promptsError) throw promptsError
+    if (orderItemsError) throw orderItemsError
+    if (reviewsError) throw reviewsError
+    if (notificationsError) throw notificationsError
+
+    if (!profile) {
+      return res.status(404).json({ error: 'Seller profile not found' })
+    }
+
+    const promptSummaries =
+      prompts?.map((prompt) => ({
+        id: prompt.id,
+        title: prompt.title,
+        category: prompt.category_id || 'uncategorized',
+        price: (prompt.price_cents || 0) / 100,
+        status: prompt.status,
+        lastUpdated: prompt.updated_at,
+        metrics: prompt.metrics || null,
+        qaScore: prompt.qa_score || null
+      })) ?? []
+
+    const lifecycleColumns = [
+      { stage: 'drafts', title: 'Drafts', description: 'Work in progress prompts' },
+      { stage: 'testing', title: 'Testing', description: 'Validating quality & results' },
+      { stage: 'review', title: 'Review', description: 'Awaiting compliance/go-live' },
+      { stage: 'live', title: 'Live', description: 'Earning revenue today' }
+    ].map((column) => ({
+      ...column,
+      prompts: promptSummaries.filter((prompt) => {
+        if (column.stage === 'drafts') return prompt.status === 'draft'
+        if (column.stage === 'testing') return prompt.status === 'testing'
+        if (column.stage === 'review') return prompt.status === 'review'
+        if (column.stage === 'live') return prompt.status === 'live'
+        return false
+      })
+    }))
+
+    const totalSales = orderItems?.length ?? 0
+    const lifetimeEarningsCents =
+      orderItems?.reduce((sum, item) => sum + (item.seller_earnings_cents || 0), 0) ?? 0
+    
+    // Calculate 30-day stats
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const recentOrders = orderItems?.filter(
+      (item) => new Date(item.created_at) >= thirtyDaysAgo
+    ) ?? []
+    const earnings30DaysCents = recentOrders.reduce(
+      (sum, item) => sum + (item.seller_earnings_cents || 0),
+      0
+    )
+    
+    const pendingAmountCents =
+      Math.max(
+        0,
+        orderItems?.slice(0, 5).reduce((sum, item) => sum + (item.seller_earnings_cents || 0), 0) ??
+          0
+      ) ?? 0
+
+    const livePrompts = promptSummaries.filter((p) => p.status === 'live')
+    const totalPrompts = promptSummaries.length
+
+    const dashboard = {
+      sellerId,
+      profile: {
+        name: sellerProfile?.headline || profile.display_name || profile.username || 'Unnamed',
+        avatarUrl: profile.avatar_url,
+        verificationStatus: sellerProfile?.verification_status || 'unverified',
+        completionPercent: sellerProfile?.completion_percent || 0,
+        checklist: sellerProfile?.checklist || []
+      },
+      kpis: [
+        {
+          id: 'revenue_30d',
+          label: 'Net Earn (30D)',
+          value: `$${(earnings30DaysCents / 100).toFixed(2)}`,
+          hint: 'After payouts',
+          change: null // Can add trend later
+        },
+        {
+          id: 'catalog',
+          label: 'Prompts',
+          value: String(totalPrompts),
+          hint: 'Track and manage your prompts',
+          change: null
+        },
+        {
+          id: 'conversion',
+          label: 'Orders',
+          value: String(totalSales),
+          hint: 'Total paid orders',
+          change: null
+        },
+        {
+          id: 'lifetime',
+          label: 'Lifetime Earnings',
+          value: `$${(lifetimeEarningsCents / 100).toFixed(2)}`,
+          hint: 'All-time revenue',
+          change: null
+        }
+      ],
+      lifecycle: lifecycleColumns,
+      testing: {
+        totalActive: promptSummaries.filter((p) => p.status === 'testing').length,
+        avgTurnaroundMinutes: 45,
+        runs: []
+      },
+      payouts: {
+        pendingAmount: pendingAmountCents / 100,
+        lifetimeEarnings: lifetimeEarningsCents / 100,
+        historyPreview: orderItems?.slice(0, 5).map((item) => ({
+          id: item.id,
+          amount: (item.seller_earnings_cents || 0) / 100,
+          status: 'pending',
+          scheduledFor: item.created_at
+        })),
+        feeSplit: sellerProfile?.fee_split || { platformPercent: 15, sellerPercent: 85 }
+      },
+      education: {
+        certificationProgress: sellerProfile?.metrics?.certificationProgress || 0,
+        recommendations: [],
+        activeCourse: null
+      },
+      alerts: notifications?.map((notification) => ({
+        id: notification.id,
+        type: notification.type || 'feature',
+        title: notification.title,
+        message: notification.body,
+        severity: notification.metadata?.severity || 'info'
+      })) ?? [],
+      feedback:
+        reviews?.map((review) => ({
+          id: review.id,
+          promptId: review.prompt_id,
+          buyerHandle: review.buyer_id,
+          rating: review.rating,
+          comment: review.comment,
+          createdAt: review.created_at
+        })) ?? []
+    }
+
+    res.json(dashboard)
+  } catch (error: any) {
+    console.error('[Sellers] failed to build dashboard', error)
+    res.status(500).json({ error: 'Failed to load seller dashboard' })
+  }
+})
+
+// GET /api/sellers/:id/prompts - list seller's prompts with filters
+app.get('/api/sellers/:id/prompts', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Supabase not configured on server' })
+  }
+
+  try {
+    const { id: sellerId } = req.params
+    const status = req.query.status as string | undefined
+    const limit = Math.min(Number(req.query.limit) || 50, 100)
+    const offset = Number(req.query.offset) || 0
+
+    let query = supabaseAdmin
+      .from('prompts')
+      .select('*')
+      .eq('seller_id', sellerId)
+      .order('updated_at', { ascending: false })
+      .range(offset, offset + limit - 1)
+
+    if (status) {
+      query = query.eq('status', status)
+    }
+
+    const { data: prompts, error } = await query
+
+    if (error) throw error
+
+    const formatted = prompts?.map((prompt) => ({
+      id: prompt.id,
+      title: prompt.title,
+      slug: prompt.slug,
+      summary: prompt.summary,
+      price: (prompt.price_cents || 0) / 100,
+      status: prompt.status,
+      visibility: prompt.visibility,
+      qaScore: prompt.qa_score,
+      metrics: prompt.metrics || {},
+      tags: prompt.tags || [],
+      thumbnailUrl: prompt.thumbnail_url,
+      createdAt: prompt.created_at,
+      updatedAt: prompt.updated_at,
+      publishedAt: prompt.published_at
+    })) ?? []
+
+    res.json({ prompts: formatted, total: formatted.length })
+  } catch (error: any) {
+    console.error('[Sellers] failed to fetch prompts', error)
+    res.status(500).json({ error: 'Failed to load prompts' })
+  }
+})
+
+// GET /api/sellers/:id/stats - quick stats for widgets
+app.get('/api/sellers/:id/stats', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Supabase not configured on server' })
+  }
+
+  try {
+    const { id: sellerId } = req.params
+    const period = (req.query.period as string) || '30d' // 7d, 30d, 90d, all
+
+    const daysBack = period === '7d' ? 7 : period === '30d' ? 30 : period === '90d' ? 90 : null
+    const cutoffDate = daysBack ? new Date() : null
+    if (cutoffDate && daysBack) {
+      cutoffDate.setDate(cutoffDate.getDate() - daysBack)
+    }
+
+    const [
+      { data: prompts },
+      { data: orderItems },
+      { data: reviews }
+    ] = await Promise.all([
+      supabaseAdmin
+        .from('prompts')
+        .select('id,status,price_cents,metrics')
+        .eq('seller_id', sellerId),
+      supabaseAdmin
+        .from('order_items')
+        .select('seller_earnings_cents,created_at')
+        .eq('seller_id', sellerId)
+        .order('created_at', { ascending: false }),
+      supabaseAdmin
+        .from('prompt_reviews')
+        .select('rating,created_at')
+        .eq('status', 'published')
+        .order('created_at', { ascending: false })
+    ])
+
+    const filteredOrders = cutoffDate
+      ? orderItems?.filter((item) => new Date(item.created_at) >= cutoffDate) ?? []
+      : orderItems ?? []
+
+    const earningsCents = filteredOrders.reduce(
+      (sum, item) => sum + (item.seller_earnings_cents || 0),
+      0
+    )
+
+    const livePrompts = prompts?.filter((p) => p.status === 'live') ?? []
+    const avgRating =
+      reviews && reviews.length > 0
+        ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+        : null
+
+    res.json({
+      period,
+      earnings: earningsCents / 100,
+      orders: filteredOrders.length,
+      livePrompts: livePrompts.length,
+      totalPrompts: prompts?.length ?? 0,
+      avgRating: avgRating ? Number(avgRating.toFixed(1)) : null,
+      totalReviews: reviews?.length ?? 0
+    })
+  } catch (error: any) {
+    console.error('[Sellers] failed to fetch stats', error)
+    res.status(500).json({ error: 'Failed to load stats' })
+  }
+})
+
+// GET /api/sellers/:id/prompt-drafts - load Prompt Studio drafts for a seller
+app.get('/api/sellers/:id/prompt-drafts', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Supabase not configured on server' })
+  }
+
+  try {
+    const { id: sellerId } = req.params
+
+    const { data, error } = await supabaseAdmin
+      .from('prompt_workbench_drafts')
+      .select('*')
+      .eq('seller_id', sellerId)
+      .order('updated_at', { ascending: false })
+
+    if (error) throw error
+
+    const drafts =
+      data?.map((row) => ({
+        id: row.id,
+        title: row.title,
+        text: row.prompt_text,
+        category: row.category,
+        variables: row.variables || [],
+        examples: row.examples || [],
+        validation: row.validation || {},
+        aiSuggestions: row.ai_suggestions || [],
+        status: row.status,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      })) ?? []
+
+    res.json({ drafts })
+  } catch (error: any) {
+    console.error('[PromptStudio] failed to fetch drafts', error)
+    res.status(500).json({ error: 'Failed to load prompt drafts' })
+  }
+})
+
+// POST /api/sellers/:id/prompt-drafts - create or update a Prompt Studio draft
+app.post('/api/sellers/:id/prompt-drafts', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Supabase not configured on server' })
+  }
+
+  try {
+    const { id: sellerId } = req.params
+    const {
+      id,
+      title,
+      text,
+      category,
+      variables,
+      examples,
+      validation,
+      aiSuggestions,
+      status
+    } = req.body as {
+      id?: string
+      title?: string
+      text?: string
+      category?: string
+      variables?: any
+      examples?: any
+      validation?: any
+      aiSuggestions?: any
+      status?: string
+    }
+
+    if (!title || !text) {
+      return res.status(400).json({ error: 'title and text are required' })
+    }
+
+    const payload: Record<string, any> = {
+      seller_id: sellerId,
+      title,
+      prompt_text: text,
+      category: category || null,
+      variables: variables ?? [],
+      examples: examples ?? [],
+      validation: validation ?? {},
+      ai_suggestions: aiSuggestions ?? [],
+      status: status || 'draft'
+    }
+
+    let result
+    if (id) {
+      result = await supabaseAdmin
+        .from('prompt_workbench_drafts')
+        .update(payload)
+        .eq('id', id)
+        .eq('seller_id', sellerId)
+        .select('*')
+        .maybeSingle()
+    } else {
+      result = await supabaseAdmin
+        .from('prompt_workbench_drafts')
+        .insert(payload)
+        .select('*')
+        .maybeSingle()
+    }
+
+    const { data, error } = result
+
+    if (error || !data) {
+      throw error || new Error('No draft returned from database')
+    }
+
+    const draft = {
+      id: data.id,
+      title: data.title,
+      text: data.prompt_text,
+      category: data.category,
+      variables: data.variables || [],
+      examples: data.examples || [],
+      validation: data.validation || {},
+      aiSuggestions: data.ai_suggestions || [],
+      status: data.status,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    }
+
+    res.json({ draft })
+  } catch (error: any) {
+    console.error('[PromptStudio] failed to upsert draft', error)
+    res.status(500).json({ error: 'Failed to save prompt draft' })
+  }
+})
+
+// POST /api/profiles/sync - ensure Supabase profile rows exist after auth
+app.post('/api/profiles/sync', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Supabase not configured on server' })
+  }
+
+  try {
+    const {
+      userId,
+      role = 'buyer',
+      username,
+      displayName,
+      avatarUrl,
+      country,
+      metadata,
+      sellerProfile
+    } = req.body as {
+      userId?: string
+      role?: string
+      username?: string
+      displayName?: string
+      avatarUrl?: string
+      country?: string
+      metadata?: Record<string, any>
+      sellerProfile?: {
+        headline?: string
+        verificationStatus?: string
+        completionPercent?: number
+        payoutEmail?: string
+        payoutMethod?: string
+        checklist?: any[]
+        metrics?: Record<string, any>
+      }
+    }
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' })
+    }
+
+    const profilePayload: Record<string, any> = {
+      id: userId,
+      role,
+      username,
+      display_name: displayName,
+      avatar_url: avatarUrl,
+      country,
+      metadata
+    }
+
+    // Remove undefined keys so Supabase doesn't overwrite with null
+    Object.keys(profilePayload).forEach((key) => {
+      if (profilePayload[key] === undefined) {
+        delete profilePayload[key]
+      }
+    })
+
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .upsert(profilePayload, { onConflict: 'id' })
+      .select('*')
+      .single()
+
+    if (profileError) {
+      throw profileError
+    }
+
+    let sellerProfileRow = null
+    const shouldSyncSeller = role === 'seller' || Boolean(sellerProfile)
+
+    if (shouldSyncSeller) {
+      const sellerPayload: Record<string, any> = {
+        seller_id: userId,
+        headline: sellerProfile?.headline,
+        verification_status: sellerProfile?.verificationStatus || 'unverified',
+        completion_percent: sellerProfile?.completionPercent ?? 0,
+        payout_email: sellerProfile?.payoutEmail,
+        payout_method: sellerProfile?.payoutMethod,
+        checklist: sellerProfile?.checklist,
+        metrics: sellerProfile?.metrics
+      }
+
+      Object.keys(sellerPayload).forEach((key) => {
+        if (sellerPayload[key] === undefined) {
+          delete sellerPayload[key]
+        }
+      })
+
+      const { data, error } = await supabaseAdmin
+        .from('seller_profiles')
+        .upsert(sellerPayload, { onConflict: 'seller_id' })
+        .select('*')
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      sellerProfileRow = data
+    }
+
+    res.json({
+      success: true,
+      profile,
+      sellerProfile: sellerProfileRow
+    })
+  } catch (error: any) {
+    console.error('[Profiles] failed to sync profile', error)
+    res.status(500).json({ error: 'Failed to sync profile' })
+  }
+})
 
 function generateOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
@@ -133,12 +1382,7 @@ app.post('/otp/send', async (req, res) => {
     const code = generateOtp()
     const expiresAt = Date.now() + 10 * 60 * 1000
     
-    // Store OTP in Firestore if available
-    if (db) {
-      await db.collection('emailOtps').doc(email).set({ code, expiresAt, attempts: 0 }, { merge: true })
-    } else {
-      console.warn('Firestore not available - OTP not persisted')
-    }
+    otpStore.set(email, { code, expiresAt, attempts: 0 })
 
     if (!resend) return res.status(500).json({ error: 'Email service not configured' })
 
@@ -149,7 +1393,12 @@ app.post('/otp/send', async (req, res) => {
       html: otpHtmlTemplate(code)
     })
 
-    res.json({ ok: true })
+    const payload: Record<string, any> = { ok: true }
+    if (process.env.NODE_ENV !== 'production') {
+      payload.devCode = code
+    }
+
+    res.json(payload)
   } catch (e: any) {
     console.error(e)
     res.status(500).json({ error: 'Failed to send OTP' })
@@ -162,23 +1411,19 @@ app.post('/otp/verify', async (req, res) => {
     const { email, code } = req.body as { email: string; code: string }
     if (!email || !code) return res.status(400).json({ error: 'Email and code required' })
 
-    if (!db) {
-      console.warn('Firestore not available - OTP verification skipped')
-      return res.json({ ok: true }) // Allow verification to pass for testing
+    const entry = otpStore.get(email)
+    if (!entry) return res.status(400).json({ error: 'OTP not found' })
+    if (Date.now() > entry.expiresAt) {
+      otpStore.delete(email)
+      return res.status(400).json({ error: 'OTP expired' })
     }
-
-    const docRef = db.collection('emailOtps').doc(email)
-    const snap = await docRef.get()
-    if (!snap.exists) return res.status(400).json({ error: 'OTP not found' })
-    const data = snap.data() as any
-    if (Date.now() > data.expiresAt) return res.status(400).json({ error: 'OTP expired' })
-    if (data.code !== code) {
-      const attempts = (data.attempts || 0) + 1
-      await docRef.update({ attempts })
+    if (entry.code !== code) {
+      entry.attempts = (entry.attempts || 0) + 1
+      otpStore.set(email, entry)
       return res.status(400).json({ error: 'Invalid code' })
     }
 
-    await docRef.delete()
+    otpStore.delete(email)
     res.json({ ok: true })
   } catch (e: any) {
     console.error(e)
@@ -718,9 +1963,37 @@ app.post('/api/chat/free', async (req, res) => {
 })
 
 // POST /api/studio/execute - Execute AI API calls
+function buildFriendlyError(provider: string | undefined, model: string | undefined, status: number, rawMessage: string) {
+  let suggestion: string | undefined
+  let fallbackModels: string[] | undefined
+
+  if (
+    provider === 'openai' &&
+    status === 404 &&
+    /does not exist|do not have access/i.test(rawMessage) &&
+    model
+  ) {
+    suggestion =
+      `OpenAI reports that ${model} is unavailable for your account. This usually happens when the model is not part of your plan or it has been renamed.`
+    fallbackModels = ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo']
+  } else if (status === 401) {
+    suggestion = 'Double-check that the API key is valid and has the correct scopes.'
+  } else if (status === 429) {
+    suggestion = 'The provider is rate limiting this key. Wait a bit or lower your request volume.'
+  }
+
+  return { suggestion, fallbackModels }
+}
+
 app.post('/api/studio/execute', async (req, res) => {
   const startTime = Date.now()
   const clientId = getClientIdentifier(req)
+  const workflowStages = normalizeWorkflowStages(req.body?.workflowStages)
+  const stageOrder = workflowStages.map((stage) => stage.id)
+  const activeStageIds = new Set(stageOrder)
+  const stageResults: StageResult[] = []
+  const assets: { images?: string[]; videos?: string[] } = {}
+  const hasStage = (id: WorkflowStageId) => activeStageIds.has(id)
   
   try {
     // Rate limiting
@@ -747,7 +2020,7 @@ app.post('/api/studio/execute', async (req, res) => {
       provider,
       model,
       apiKey,
-      systemPrompt,
+      systemPrompt: rawSystemPrompt,
       userPrompt,
       temperature,
       maxTokens,
@@ -765,6 +2038,36 @@ app.post('/api/studio/execute', async (req, res) => {
       aspectRatio
     } = req.body
 
+    const systemPrompt = hasStage('briefing')
+      ? rawSystemPrompt || DEFAULT_CHAT_SYSTEM_PROMPT
+      : undefined
+
+    if (!hasStage('generation')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Enable the Primary Generation stage before executing.',
+        metadata: {
+          responseTime: Date.now() - startTime,
+          missingStage: 'generation'
+        },
+        stageResults: stageResults.length ? sortStageResults(stageResults, stageOrder) : undefined
+      })
+    }
+
+    if (hasStage('briefing')) {
+      stageResults.push({
+        id: 'briefing',
+        status: 'completed',
+        summary: rawSystemPrompt
+          ? 'Custom guardrails applied.'
+          : 'Default PromptNX guardrails injected.',
+        outputType: 'text',
+        payload: {
+          systemPrompt
+        }
+      })
+    }
+
     // Check cache
     if (useCache) {
       const cacheKey = generateCacheKey({
@@ -773,7 +2076,8 @@ app.post('/api/studio/execute', async (req, res) => {
         userPrompt,
         systemPrompt,
         temperature,
-        maxTokens
+        maxTokens,
+        workflow: stageOrder.join('|')
       })
       const cached = getCache(cacheKey)
       if (cached) {
@@ -1015,6 +2319,86 @@ app.post('/api/studio/execute', async (req, res) => {
       })
     }
 
+    if (hasStage('generation')) {
+      stageResults.push({
+        id: 'generation',
+        status: result?.success ? 'completed' : 'failed',
+        summary: result?.success
+          ? `Generated ${result?.type || 'text'} output via ${provider}.`
+          : 'Primary generation failed.',
+        outputType: result?.type || 'text',
+        payload: result?.data
+      })
+    }
+
+    if (hasStage('image')) {
+      try {
+        const imageStage = await handleImageStage({
+          provider,
+          apiKey,
+          prompt: userPrompt,
+          size,
+          quality,
+          style
+        })
+        stageResults.push(imageStage)
+        if (imageStage.payload?.source) {
+          assets.images = [...(assets.images || []), imageStage.payload.source]
+        }
+      } catch (imageError: any) {
+        stageResults.push({
+          id: 'image',
+          status: 'failed',
+          summary: 'Failed to generate visual companion.',
+          details: imageError.message || 'Unknown image stage error.'
+        })
+      }
+    }
+
+    if (hasStage('chat-loop')) {
+      try {
+        const assistantOutput =
+          typeof result?.data === 'string'
+            ? result.data
+            : JSON.stringify(result?.data ?? {}).slice(0, 2000)
+
+        const chatStage = await handleChatLoopStage({
+          provider,
+          apiKey,
+          systemPrompt,
+          userPrompt,
+          assistantOutput,
+          temperature,
+          maxTokens
+        })
+        stageResults.push(chatStage)
+      } catch (chatError: any) {
+        stageResults.push({
+          id: 'chat-loop',
+          status: 'failed',
+          summary: 'Chat loop stage failed.',
+          details: chatError.message || 'Unknown chat loop error.'
+        })
+      }
+    }
+
+    if (hasStage('video')) {
+      const videoStage = buildVideoStageResult(provider, result)
+      stageResults.push(videoStage)
+      if (videoStage.payload?.url) {
+        assets.videos = [...(assets.videos || []), videoStage.payload.url]
+      }
+    }
+
+    const orderedStageResults = stageResults.length ? sortStageResults(stageResults, stageOrder) : undefined
+    const assetPayload =
+      (assets.images && assets.images.length) || (assets.videos && assets.videos.length)
+        ? {
+            ...(assets.images?.length ? { images: assets.images } : {}),
+            ...(assets.videos?.length ? { videos: assets.videos } : {})
+          }
+        : undefined
+
     // Add metadata
     const responseData = {
       ...result,
@@ -1024,7 +2408,9 @@ app.post('/api/studio/execute', async (req, res) => {
         responseTime: Date.now() - startTime,
         cost: cost > 0 ? formatCost(cost) : null,
         cached: false
-      }
+      },
+      stageResults: orderedStageResults,
+      assets: assetPayload
     }
 
     // Cache successful text responses (not images/videos)
@@ -1035,7 +2421,8 @@ app.post('/api/studio/execute', async (req, res) => {
         userPrompt,
         systemPrompt,
         temperature,
-        maxTokens
+        maxTokens,
+        workflow: stageOrder.join('|')
       })
       setCache(cacheKey, responseData, 5 * 60 * 1000) // 5 minutes
     }
@@ -1045,10 +2432,18 @@ app.post('/api/studio/execute', async (req, res) => {
 
     res.json(responseData)
   } catch (error: any) {
+    const statusCode = error.response?.status || 500
     const errorMessage = error.response?.data?.error?.message || 
                         error.response?.data?.message ||
                         error.message || 
                         'Failed to execute API call'
+
+    const { suggestion, fallbackModels } = buildFriendlyError(
+      req.body.provider,
+      req.body.model,
+      statusCode,
+      errorMessage
+    )
     
     console.error(`[API Error] ${error.response?.status || 500}:`, {
       provider: req.body.provider,
@@ -1057,14 +2452,17 @@ app.post('/api/studio/execute', async (req, res) => {
       responseTime: Date.now() - startTime
     })
 
-    res.status(error.response?.status || 500).json({
+    res.status(statusCode).json({
       success: false,
-      error: errorMessage,
+      error: suggestion ? `${errorMessage} ${suggestion}` : errorMessage,
       metadata: {
         responseTime: Date.now() - startTime,
         provider: req.body.provider,
-        model: req.body.model
-      }
+        model: req.body.model,
+        suggestion,
+        fallbackModels
+      },
+      stageResults: stageResults.length ? sortStageResults(stageResults, stageOrder) : undefined
     })
   }
 })

@@ -1,5 +1,5 @@
 import type { KeyboardEvent } from "react"
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { MarketplaceHeader } from "@/components/marketplace/MarketplaceHeader"
@@ -7,20 +7,15 @@ import { FiltersBar } from "@/components/marketplace/FiltersBar"
 import { PromptGrid } from "@/components/marketplace/PromptGrid"
 import { useToast } from "@/hooks/use-toast"
 import { usePromptActions } from "@/hooks/usePromptActions"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
 import { generateProductImage, generateProductThumbnail } from "@/lib/marketplaceImages"
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  limit,
-  getDocs,
-  onSnapshot,
-  startAfter,
-  DocumentSnapshot
-} from "firebase/firestore"
 import { Plus, X, Mic, AudioLines, MessageCircle, Send, Loader2 } from "lucide-react"
+import codeReviewImg from "@/assets/marketplace/code_review_assistant.png"
+import creativeWritingImg from "@/assets/marketplace/creative_writing_generator.png"
+import businessStrategyImg from "@/assets/marketplace/business_strategy_analyzer.png"
+import marketingImg from "@/assets/marketplace/content_marketing_assistant.png"
+import dataScienceImg from "@/assets/marketplace/data_science_planner.png"
+import uiUxImg from "@/assets/marketplace/ui_ux_design_assistant.png"
+import aiMlImg from "@/assets/marketplace/ai_ml_model_builder.png"
 
 interface PromptData {
   id: string
@@ -60,15 +55,13 @@ const QUICK_INSIGHTS = [
 export function MarketplaceIndex() {
   const { success, error } = useToast()
   const { toggleLike, toggleSave, toggleFollow } = usePromptActions()
-  
+
   // State
   const [prompts, setPrompts] = useState<PromptData[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [hasMore, setHasMore] = useState(true)
-  const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null)
-  
+  const [hasMore, setHasMore] = useState(false)
+
   // Filters
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
@@ -87,144 +80,23 @@ export function MarketplaceIndex() {
   const [isCopilotThinking, setIsCopilotThinking] = useState(false)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const pendingReplyRef = useRef<number | null>(null)
+  const [showCopilotBar, setShowCopilotBar] = useState(true)
 
   // Load prompts with filters
-  const loadPrompts = useCallback(async (reset = false) => {
-    if (!isFirebaseConfigured || !firebaseDb) {
-      // Mock data for demo mode
-      loadMockData()
-      return
-    }
-
+  const loadPrompts = (reset = false) => {
     try {
       if (reset) {
         setLoading(true)
-        setPrompts([])
-        setLastDoc(null)
-        setHasMore(true)
-      } else {
-        setLoadingMore(true)
       }
-
       setErrorMessage(null)
-
-      // Build query
-      let q = query(
-        collection(firebaseDb, 'prompts'),
-        where('visibility', '==', true)
-      )
-
-      // Apply category filter
-      if (selectedCategory !== "all") {
-        q = query(q, where('category', '==', selectedCategory))
-      }
-
-      // Apply difficulty filter
-      if (selectedDifficulty !== "all") {
-        q = query(q, where('difficulty', '==', selectedDifficulty))
-      }
-
-      // Apply sorting
-      switch (sortBy) {
-        case "newest":
-          q = query(q, orderBy('createdAt', 'desc'))
-          break
-        case "oldest":
-          q = query(q, orderBy('createdAt', 'asc'))
-          break
-        case "most_liked":
-          q = query(q, orderBy('likes', 'desc'))
-          break
-        case "most_saved":
-          q = query(q, orderBy('saves', 'desc'))
-          break
-        case "alphabetical":
-          q = query(q, orderBy('title', 'asc'))
-          break
-        default:
-          q = query(q, orderBy('createdAt', 'desc'))
-      }
-
-      // Apply pagination
-      if (lastDoc && !reset) {
-        q = query(q, startAfter(lastDoc))
-      }
-
-      q = query(q, limit(20))
-
-      const snapshot = await getDocs(q)
-      const newPrompts: PromptData[] = []
-
-      for (const doc of snapshot.docs) {
-        const data = doc.data()
-        let creatorName = "Unknown User"
-        let creatorAvatar = ""
-
-        // Fetch creator info
-        if (data.uid) {
-          try {
-            const userQuery = query(
-              collection(firebaseDb, 'users'),
-              where('__name__', '==', data.uid)
-            )
-            const userSnapshot = await getDocs(userQuery)
-            if (!userSnapshot.empty) {
-              const userData = userSnapshot.docs[0].data()
-              creatorName = userData.displayName || userData.email?.split('@')[0] || "Unknown User"
-              creatorAvatar = userData.photoURL || ""
-            }
-          } catch (err) {
-            console.error('Error fetching user data:', err)
-          }
-        }
-
-        newPrompts.push({
-          id: doc.id,
-          ...data,
-          creatorName,
-          creatorAvatar
-        } as PromptData)
-      }
-
-      // Advanced search filter (client-side for now)
-      let filteredPrompts = newPrompts
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim()
-        const searchTerms = query.split(/\s+/).filter(term => term.length > 0)
-        
-        filteredPrompts = newPrompts.filter(prompt => {
-          const searchText = [
-            prompt.title,
-            prompt.description,
-            prompt.category,
-            prompt.creatorName || "",
-            ...prompt.tags
-          ].join(" ").toLowerCase()
-          
-          // Match all search terms (AND logic) or any term (OR logic)
-          // Using AND logic for more precise results
-          return searchTerms.every(term => searchText.includes(term))
-        })
-      }
-
-      if (reset) {
-        setPrompts(filteredPrompts)
-      } else {
-        setPrompts(prev => [...prev, ...filteredPrompts])
-      }
-
-      setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null)
-      setHasMore(snapshot.docs.length === 20)
-
+      loadMockData()
     } catch (err: any) {
       console.error('Error loading prompts:', err)
       setErrorMessage(err.message || "Failed to load prompts")
       error("Loading failed", "Failed to load prompts")
-    } finally {
       setLoading(false)
-      setLoadingMore(false)
     }
-  }, [searchQuery, selectedCategory, selectedDifficulty, sortBy, lastDoc, error])
+  }
 
   // Load mock data for demo mode
   const loadMockData = () => {
@@ -238,7 +110,7 @@ export function MarketplaceIndex() {
         tags: ["code", "review", "security", "best-practices"],
         difficulty: "intermediate",
         visibility: true,
-        previewImageURL: generateProductImage("development", "1", "Advanced Code Review Assistant"),
+        previewImageURL: codeReviewImg,
         fileURL: "https://example.com/sample-file.json",
         likes: ["user2", "user3", "user4"],
         saves: ["user5", "user6"],
@@ -256,7 +128,7 @@ export function MarketplaceIndex() {
         tags: ["creative", "writing", "storytelling", "inspiration"],
         difficulty: "beginner",
         visibility: true,
-        previewImageURL: generateProductImage("writing", "2", "Creative Writing Prompt Generator"),
+        previewImageURL: creativeWritingImg,
         likes: ["user1", "user3", "user5", "user7"],
         saves: ["user2", "user6", "user8"],
         createdAt: new Date(Date.now() - 86400000),
@@ -273,7 +145,7 @@ export function MarketplaceIndex() {
         tags: ["business", "strategy", "analysis", "growth"],
         difficulty: "advanced",
         visibility: true,
-        previewImageURL: generateProductImage("business", "3", "Business Strategy Analyzer"),
+        previewImageURL: businessStrategyImg,
         likes: ["user1", "user4", "user9"],
         saves: ["user3", "user7", "user10"],
         createdAt: new Date(Date.now() - 172800000),
@@ -290,7 +162,7 @@ export function MarketplaceIndex() {
         tags: ["marketing", "content", "social-media", "seo"],
         difficulty: "intermediate",
         visibility: true,
-        previewImageURL: generateProductImage("marketing", "4", "AI Content Marketing Assistant"),
+        previewImageURL: marketingImg,
         likes: ["user2", "user5", "user8"],
         saves: ["user4", "user6", "user11"],
         createdAt: new Date(Date.now() - 259200000),
@@ -307,7 +179,7 @@ export function MarketplaceIndex() {
         tags: ["data-science", "machine-learning", "python", "analytics"],
         difficulty: "advanced",
         visibility: true,
-        previewImageURL: generateProductImage("data", "5", "Data Science Project Planner"),
+        previewImageURL: dataScienceImg,
         likes: ["user1", "user3", "user6"],
         saves: ["user5", "user9", "user12"],
         createdAt: new Date(Date.now() - 345600000),
@@ -324,7 +196,7 @@ export function MarketplaceIndex() {
         tags: ["design", "ui", "ux", "accessibility"],
         difficulty: "intermediate",
         visibility: true,
-        previewImageURL: generateProductImage("design", "6", "UI/UX Design Critique Assistant"),
+        previewImageURL: uiUxImg,
         likes: ["user2", "user4", "user7"],
         saves: ["user6", "user8", "user10"],
         createdAt: new Date(Date.now() - 432000000),
@@ -341,7 +213,7 @@ export function MarketplaceIndex() {
         tags: ["ai", "machine-learning", "neural-networks", "deep-learning"],
         difficulty: "advanced",
         visibility: true,
-        previewImageURL: generateProductImage("ai", "7", "AI Machine Learning Model Builder"),
+        previewImageURL: aiMlImg,
         likes: ["user1", "user2", "user5", "user8"],
         saves: ["user3", "user6", "user9"],
         createdAt: new Date(Date.now() - 518400000),
@@ -358,7 +230,7 @@ export function MarketplaceIndex() {
         tags: ["education", "course", "learning", "curriculum"],
         difficulty: "intermediate",
         visibility: true,
-        previewImageURL: generateProductImage("education", "8", "Educational Course Planner"),
+        previewImageURL: creativeWritingImg,
         likes: ["user2", "user4", "user6"],
         saves: ["user1", "user5", "user7"],
         createdAt: new Date(Date.now() - 604800000),
@@ -375,7 +247,7 @@ export function MarketplaceIndex() {
         tags: ["fitness", "wellness", "health", "nutrition"],
         difficulty: "beginner",
         visibility: true,
-        previewImageURL: generateProductImage("health", "9", "Fitness & Wellness Tracker"),
+        previewImageURL: dataScienceImg,
         likes: ["user3", "user5", "user7", "user10"],
         saves: ["user2", "user4", "user8"],
         createdAt: new Date(Date.now() - 691200000),
@@ -392,7 +264,7 @@ export function MarketplaceIndex() {
         tags: ["web-development", "full-stack", "javascript", "nodejs"],
         difficulty: "intermediate",
         visibility: true,
-        previewImageURL: generateProductImage("development", "10", "Full-Stack Web Development Guide"),
+        previewImageURL: codeReviewImg,
         likes: ["user1", "user2", "user6"],
         saves: ["user3", "user5", "user9"],
         createdAt: new Date(Date.now() - 777600000),
@@ -416,7 +288,7 @@ export function MarketplaceIndex() {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim()
       const searchTerms = query.split(/\s+/).filter(term => term.length > 0)
-      
+
       filteredPrompts = filteredPrompts.filter(prompt => {
         const searchText = [
           prompt.title,
@@ -425,7 +297,7 @@ export function MarketplaceIndex() {
           prompt.creatorName || "",
           ...prompt.tags
         ].join(" ").toLowerCase()
-        
+
         // Match all search terms for precise results
         return searchTerms.every(term => searchText.includes(term))
       })
@@ -471,7 +343,7 @@ export function MarketplaceIndex() {
 
   // Load more prompts
   const handleLoadMore = () => {
-    if (!loadingMore && hasMore) {
+    if (hasMore) {
       loadPrompts(false)
     }
   }
@@ -525,6 +397,26 @@ export function MarketplaceIndex() {
       if (pendingReplyRef.current) {
         clearTimeout(pendingReplyRef.current)
       }
+    }
+  }, [])
+
+  // Hide copilot bar when user is near the very bottom (footer area)
+  useEffect(() => {
+    const handleScroll = () => {
+      const doc = document.documentElement
+      const scrollBottom = window.innerHeight + window.scrollY
+      const docHeight = doc.scrollHeight
+      const footerThreshold = 320 // px from bottom where we start hiding
+
+      setShowCopilotBar(scrollBottom < docHeight - footerThreshold)
+    }
+
+    handleScroll()
+    window.addEventListener("scroll", handleScroll)
+    window.addEventListener("resize", handleScroll)
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+      window.removeEventListener("resize", handleScroll)
     }
   }, [])
 
@@ -596,7 +488,7 @@ export function MarketplaceIndex() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <MarketplaceHeader 
+      <MarketplaceHeader
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
       />
@@ -635,161 +527,162 @@ export function MarketplaceIndex() {
         />
       </div>
 
-      {/* Floating Copilot Bar */}
-      <div className="fixed inset-x-0 bottom-5 z-40 px-4 pointer-events-none">
-        <motion.div
-          layout
-          transition={{ type: "spring", stiffness: 200, damping: 25 }}
-          className="mx-auto max-w-4xl pointer-events-auto"
-        >
-          {!isCopilotOpen ? (
-            <button
-              className="w-full flex items-center justify-between rounded-full bg-slate-950/75 border border-white/10 backdrop-blur-2xl shadow-[0_25px_60px_rgba(2,6,23,0.65)] px-5 py-3 text-left text-white transition hover:border-primary/40"
-              onClick={() => setIsCopilotOpen(true)}
-            >
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-full bg-white/10 flex items-center justify-center">
-                  <Plus className="h-5 w-5" />
+      {/* Floating Copilot Bar – only visible while in marketplace content area (not at global footer) */}
+      {showCopilotBar && (
+        <div className="fixed inset-x-0 bottom-5 z-40 px-4 pointer-events-none">
+          <motion.div
+            layout
+            transition={{ type: "spring", stiffness: 200, damping: 25 }}
+            className="mx-auto max-w-4xl pointer-events-auto"
+          >
+            {!isCopilotOpen ? (
+              <button
+                className="w-full flex items-center justify-between rounded-full bg-slate-950/75 border border-white/10 backdrop-blur-2xl shadow-[0_25px_60px_rgba(2,6,23,0.65)] px-5 py-3 text-left text-white transition hover:border-primary/40"
+                onClick={() => setIsCopilotOpen(true)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-white/10 flex items-center justify-center">
+                    <Plus className="h-5 w-5" />
+                  </div>
+                  <span className="text-sm text-white/80">Ask anything…</span>
                 </div>
-                <span className="text-sm text-white/80">Ask anything…</span>
-              </div>
-              <div className="flex items-center gap-3 text-white/70">
-                <span className="h-2 w-2 rounded-full bg-violet-400" />
-                <Mic className="h-4 w-4" />
-                <AudioLines className="h-5 w-5" />
-              </div>
-            </button>
-          ) : (
-            <div className="rounded-[32px] border border-white/10 bg-slate-950/90 backdrop-blur-2xl shadow-[0_35px_90px_rgba(2,6,23,0.75)] p-6 space-y-4 text-white">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.5em] text-white/50">Marketplace Copilot</p>
-                  <p className="text-sm text-white/80">Stay on the marketplace while Nova curates prompts for you.</p>
+                <div className="flex items-center gap-3 text-white/70">
+                  <span className="h-2 w-2 rounded-full bg-violet-400" />
+                  <Mic className="h-4 w-4" />
+                  <AudioLines className="h-5 w-5" />
                 </div>
-                <div className="flex items-center gap-2">
+              </button>
+            ) : (
+              <div className="rounded-[32px] border border-white/10 bg-slate-950/90 backdrop-blur-2xl shadow-[0_35px_90px_rgba(2,6,23,0.75)] p-6 space-y-4 text-white">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.5em] text-white/50">Marketplace Copilot</p>
+                    <p className="text-sm text-white/80">Stay on the marketplace while Nova curates prompts for you.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isCopilotThinking && (
+                      <span className="flex items-center gap-1 text-xs text-white/70">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Searching
+                      </span>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-white/70 hover:text-white rounded-full"
+                      onClick={() => setIsCopilotOpen(false)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {QUICK_INSIGHTS.map(chip => (
+                    <button
+                      key={chip}
+                      className="whitespace-nowrap rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/80 hover:border-primary/40 hover:text-white transition"
+                      onClick={() => handleQuickInsert(chip)}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+
+                <div
+                  ref={scrollRef}
+                  className="max-h-[260px] overflow-y-auto pr-1 space-y-3 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent"
+                >
+                  {copilotMessages.map(message => (
+                    <div key={message.id} className={`flex ${message.role === "assistant" ? "justify-start" : "justify-end"}`}>
+                      <div
+                        className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${message.role === "assistant"
+                          ? "bg-white/10 text-white"
+                          : "bg-primary text-primary-foreground shadow-lg shadow-primary/40"
+                          }`}
+                      >
+                        <div className="flex items-center gap-2 text-xs uppercase tracking-wide mb-1 opacity-70">
+                          {message.role === "assistant" ? (
+                            <>
+                              <MessageCircle className="h-3.5 w-3.5" />
+                              Nova
+                            </>
+                          ) : (
+                            "You"
+                          )}
+                        </div>
+                        <p>{message.content}</p>
+
+                        {message.suggestions && message.suggestions.length > 0 && (
+                          <div className="mt-3 space-y-2">
+                            {message.suggestions.map(suggestion => (
+                              <div key={suggestion.id} className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/80">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex-1">
+                                    <p className="text-sm font-semibold text-white line-clamp-1">{suggestion.title}</p>
+                                    <p className="text-[11px] text-white/60 line-clamp-1">{suggestion.description}</p>
+                                  </div>
+                                  {typeof suggestion.price === "number" && (
+                                    <span className="text-sm font-semibold text-primary">${suggestion.price.toFixed(2)}</span>
+                                  )}
+                                </div>
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    className="h-7 rounded-full px-3 text-xs"
+                                    onClick={() => handlePromptOpen(suggestion.id)}
+                                  >
+                                    View
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    className="h-7 rounded-full px-3 text-xs text-slate-900"
+                                    onClick={() => handleSave(suggestion.id)}
+                                  >
+                                    Save
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                   {isCopilotThinking && (
-                    <span className="flex items-center gap-1 text-xs text-white/70">
+                    <p className="flex items-center gap-2 text-xs text-white/70">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Searching
-                    </span>
+                      Nova is mapping your request to marketplace data…
+                    </p>
                   )}
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="flex-1 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 focus-within:border-primary/40">
+                    <textarea
+                      rows={1}
+                      className="w-full resize-none bg-transparent text-sm text-white placeholder:text-white/60 focus:outline-none"
+                      placeholder="Ask for a specific use case or prompt style…"
+                      value={copilotInput}
+                      onChange={event => setCopilotInput(event.target.value)}
+                      onKeyDown={handleComposerKeyDown}
+                    />
+                  </div>
                   <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-white/70 hover:text-white rounded-full"
-                    onClick={() => setIsCopilotOpen(false)}
+                    className="w-full sm:w-auto rounded-full bg-primary px-6 font-semibold shadow-lg shadow-primary/40"
+                    onClick={handleCopilotSend}
+                    disabled={!copilotInput.trim() || isCopilotThinking}
                   >
-                    <X className="h-4 w-4" />
+                    <Send className="h-4 w-4 mr-2" />
+                    Send
                   </Button>
                 </div>
               </div>
-
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {QUICK_INSIGHTS.map(chip => (
-                  <button
-                    key={chip}
-                    className="whitespace-nowrap rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/80 hover:border-primary/40 hover:text-white transition"
-                    onClick={() => handleQuickInsert(chip)}
-                  >
-                    {chip}
-                  </button>
-                ))}
-              </div>
-
-              <div
-                ref={scrollRef}
-                className="max-h-[260px] overflow-y-auto pr-1 space-y-3 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent"
-              >
-                {copilotMessages.map(message => (
-                  <div key={message.id} className={`flex ${message.role === "assistant" ? "justify-start" : "justify-end"}`}>
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                        message.role === "assistant"
-                          ? "bg-white/10 text-white"
-                          : "bg-primary text-primary-foreground shadow-lg shadow-primary/40"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 text-xs uppercase tracking-wide mb-1 opacity-70">
-                        {message.role === "assistant" ? (
-                          <>
-                            <MessageCircle className="h-3.5 w-3.5" />
-                            Nova
-                          </>
-                        ) : (
-                          "You"
-                        )}
-                      </div>
-                      <p>{message.content}</p>
-
-                      {message.suggestions && message.suggestions.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                          {message.suggestions.map(suggestion => (
-                            <div key={suggestion.id} className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/80">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex-1">
-                                  <p className="text-sm font-semibold text-white line-clamp-1">{suggestion.title}</p>
-                                  <p className="text-[11px] text-white/60 line-clamp-1">{suggestion.description}</p>
-                                </div>
-                                {typeof suggestion.price === "number" && (
-                                  <span className="text-sm font-semibold text-primary">${suggestion.price.toFixed(2)}</span>
-                                )}
-                              </div>
-                              <div className="mt-2 flex flex-wrap items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  className="h-7 rounded-full px-3 text-xs"
-                                  onClick={() => handlePromptOpen(suggestion.id)}
-                                >
-                                  View
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  className="h-7 rounded-full px-3 text-xs text-slate-900"
-                                  onClick={() => handleSave(suggestion.id)}
-                                >
-                                  Save
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {isCopilotThinking && (
-                  <p className="flex items-center gap-2 text-xs text-white/70">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Nova is mapping your request to marketplace data…
-                  </p>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <div className="flex-1 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 focus-within:border-primary/40">
-                  <textarea
-                    rows={1}
-                    className="w-full resize-none bg-transparent text-sm text-white placeholder:text-white/60 focus:outline-none"
-                    placeholder="Ask for a specific use case or prompt style…"
-                    value={copilotInput}
-                    onChange={event => setCopilotInput(event.target.value)}
-                    onKeyDown={handleComposerKeyDown}
-                  />
-                </div>
-                <Button
-                  className="w-full sm:w-auto rounded-full bg-primary px-6 font-semibold shadow-lg shadow-primary/40"
-                  onClick={handleCopilotSend}
-                  disabled={!copilotInput.trim() || isCopilotThinking}
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  Send
-                </Button>
-              </div>
-            </div>
-          )}
-        </motion.div>
-      </div>
+            )}
+          </motion.div>
+        </div>
+      )}
     </div>
   )
 }

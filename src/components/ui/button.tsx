@@ -44,7 +44,7 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, animate = true, ...props }, ref) => {
     const Comp = asChild ? Slot : "button"
-    
+
     const buttonContent = (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
@@ -53,15 +53,16 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       />
     )
 
-    if (animate && !asChild) {
+    if (animate) {
       return (
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        <motion.span
+          className="inline-flex"
+          whileHover={{ scale: 1.01, y: -1 }}
+          whileTap={{ scale: 0.985, y: 0 }}
+          transition={{ type: "spring", stiffness: 350, damping: 22 }}
         >
           {buttonContent}
-        </motion.div>
+        </motion.span>
       )
     }
 

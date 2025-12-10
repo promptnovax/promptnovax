@@ -12,8 +12,8 @@ import {
   query, 
   where, 
   getDocs 
-} from "firebase/firestore"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
+} from "@/lib/platformStubs/firestore"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
 import { 
   ArrowLeft,
   MessageCircle,
@@ -51,7 +51,7 @@ export function ConversationDetailPage({ conversationId }: ConversationDetailPag
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - use mock data
       loadMockData()
       return
@@ -62,7 +62,7 @@ export function ConversationDetailPage({ conversationId }: ConversationDetailPag
       setErrorMessage(null)
 
       // Get conversation details
-      const conversationRef = doc(firebaseDb, 'conversations', conversationId)
+      const conversationRef = doc(platformDb, 'conversations', conversationId)
       const conversationSnap = await getDoc(conversationRef)
 
       if (!conversationSnap.exists()) {
@@ -93,7 +93,7 @@ export function ConversationDetailPage({ conversationId }: ConversationDetailPag
 
       try {
         const userQuery = query(
-          collection(firebaseDb, 'users'),
+          collection(platformDb, 'users'),
           where('__name__', '==', otherParticipantId)
         )
         const userSnapshot = await getDocs(userQuery)

@@ -8,8 +8,8 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/context/AuthContext"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp } from "firebase/firestore"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp } from "@/lib/platformStubs/firestore"
 import { 
   ArrowLeft,
   Star,
@@ -274,16 +274,16 @@ export function SellerProfilePage({ sellerId }: SellerProfileProps) {
     setFollowersCount(seller.stats.followers)
     
     // Check if user is following this seller
-    if (currentUser && isFirebaseConfigured && firebaseDb) {
+    if (currentUser && isSupabaseConfigured && platformDb) {
       checkFollowStatus()
     }
   }, [currentUser, sellerId])
 
   const checkFollowStatus = async () => {
-    if (!currentUser || !isFirebaseConfigured || !firebaseDb) return
+    if (!currentUser || !isSupabaseConfigured || !platformDb) return
 
     try {
-      const userDoc = await getDoc(doc(firebaseDb, 'followers', currentUser.uid))
+      const userDoc = await getDoc(doc(platformDb, 'followers', currentUser.uid))
       if (userDoc.exists()) {
         const userData = userDoc.data()
         const followedSellerIds = userData.followedSellerIds || []
@@ -308,9 +308,9 @@ export function SellerProfilePage({ sellerId }: SellerProfileProps) {
     setIsLoading(true)
 
     try {
-      if (isFirebaseConfigured && firebaseDb) {
+      if (isSupabaseConfigured && platformDb) {
         // Use Firebase for real follow functionality
-        const userRef = doc(firebaseDb, 'followers', currentUser.uid)
+        const userRef = doc(platformDb, 'followers', currentUser.uid)
         const userDoc = await getDoc(userRef)
 
         if (isFollowing) {
@@ -365,7 +365,12 @@ export function SellerProfilePage({ sellerId }: SellerProfileProps) {
   }
 
   const handleMessage = () => {
-    window.location.hash = `#chat/${sellerId}`
+    if (!currentUser) {
+      window.location.hash = '#login'
+      return
+    }
+    // Navigate to inbox with this seller
+    window.location.hash = `#inbox?userId=${sellerId}`
   }
 
   const handlePromptClick = (promptId: string) => {

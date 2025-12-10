@@ -109,10 +109,6 @@ export function DashboardPage() {
     } else if (userRole?.role === "seller") {
       setActiveTab("seller")
       window.location.hash = "#dashboard/seller/overview"
-    } else if (userRole?.role === "both") {
-      // Keep both tabs visible; default to seller overview
-      setActiveTab("seller")
-      window.location.hash = "#dashboard/seller/overview"
     }
   }, [userRole])
 
@@ -261,9 +257,7 @@ export function DashboardPage() {
             <RoleOnboarding onComplete={(role) => {
               setNeedsOnboarding(false)
               setActiveTab(role)
-              // If role is both, default to seller overview
-              const targetRole = role === 'both' ? 'seller' : role
-              window.location.hash = `#dashboard/${targetRole}/overview`
+              window.location.hash = `#dashboard/${role}/overview`
             }} />
           </div>
         </div>

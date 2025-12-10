@@ -13,6 +13,7 @@ import {
   Check
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/context/AuthContext"
 
 interface ContactButtonsProps {
   userId?: string
@@ -33,11 +34,27 @@ export function ContactButtons({
 }: ContactButtonsProps) {
   const [showContactModal, setShowContactModal] = useState(false)
   const { success } = useToast()
+  const { currentUser } = useAuth()
 
   // Get default contact info (mock data for demo)
   const defaultWhatsApp = whatsappNumber || "+1234567890"
   const defaultInstagram = instagramHandle || userName.toLowerCase().replace(/\s+/g, "")
   const defaultPhone = phoneNumber || "+1234567890"
+
+  const handleMessage = () => {
+    if (!currentUser) {
+      // Redirect to login if not authenticated
+      window.location.hash = '#login'
+      return
+    }
+    // Navigate to messaging with this user
+    if (userId) {
+      window.location.hash = `#inbox?userId=${userId}`
+    } else {
+      window.location.hash = '#inbox'
+    }
+    success("Opening Messages", "Starting conversation with " + userName)
+  }
 
   const handleWhatsApp = () => {
     const message = `Hi ${userName}! I'm interested in your products.`
@@ -75,22 +92,11 @@ export function ContactButtons({
       <div className={`flex flex-wrap gap-2 ${className}`}>
         <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
           <Button
-            onClick={handleWhatsApp}
-            className="flex-1 bg-[#25D366] hover:bg-[#20BA5A] text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
+            onClick={handleMessage}
+            className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
           >
             <MessageCircle className="h-4 w-4 mr-2" />
-            WhatsApp
-          </Button>
-        </motion.div>
-        
-        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-          <Button
-            onClick={handleInstagram}
-            variant="outline"
-            className="flex-1 border-pink-500 text-pink-600 hover:bg-pink-50 dark:hover:bg-pink-950 font-semibold transition-all duration-200"
-          >
-            <Instagram className="h-4 w-4 mr-2" />
-            Instagram
+            Message
           </Button>
         </motion.div>
 
@@ -120,68 +126,94 @@ export function ContactButtons({
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            {/* WhatsApp Section */}
-            <div className="p-4 border rounded-lg hover:border-[#25D366] transition-colors">
+            {/* Message Section - Primary */}
+            <div className="p-4 border-2 border-primary/20 rounded-lg hover:border-primary/40 transition-colors bg-primary/5">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 bg-[#25D366]/10 rounded-lg">
-                    <MessageCircle className="h-5 w-5 text-[#25D366]" />
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <MessageCircle className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <h3 className="font-semibold">WhatsApp</h3>
-                    <p className="text-sm text-muted-foreground">Chat instantly</p>
+                    <h3 className="font-semibold">Send Message</h3>
+                    <p className="text-sm text-muted-foreground">Chat directly on PromptNX</p>
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  onClick={handleCopyWhatsApp}
-                  variant="ghost"
-                  className="h-8 w-8"
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
               </div>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 px-3 py-2 bg-muted rounded text-sm font-mono">
-                  {defaultWhatsApp}
-                </code>
-                <Button
-                  onClick={handleWhatsApp}
-                  className="bg-[#25D366] hover:bg-[#20BA5A] text-white"
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Open
-                </Button>
-              </div>
+              <Button
+                onClick={handleMessage}
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                <MessageCircle className="h-4 w-4 mr-2" />
+                Open Messages
+              </Button>
             </div>
 
-            {/* Instagram Section */}
-            <div className="p-4 border rounded-lg hover:border-pink-500 transition-colors">
-              <div className="flex items-center justify-between mb-3">
+            {/* WhatsApp Section - Optional */}
+            {whatsappNumber && (
+              <div className="p-4 border rounded-lg hover:border-[#25D366] transition-colors">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-[#25D366]/10 rounded-lg">
+                      <MessageCircle className="h-5 w-5 text-[#25D366]" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">WhatsApp</h3>
+                      <p className="text-sm text-muted-foreground">Chat on WhatsApp</p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleCopyWhatsApp}
+                    variant="ghost"
+                    className="h-8 w-8"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
                 <div className="flex items-center gap-2">
-                  <div className="p-2 bg-pink-500/10 rounded-lg">
-                    <Instagram className="h-5 w-5 text-pink-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Instagram</h3>
-                    <p className="text-sm text-muted-foreground">View profile</p>
-                  </div>
+                  <code className="flex-1 px-3 py-2 bg-muted rounded text-sm font-mono">
+                    {defaultWhatsApp}
+                  </code>
+                  <Button
+                    onClick={handleWhatsApp}
+                    className="bg-[#25D366] hover:bg-[#20BA5A] text-white"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 px-3 py-2 bg-muted rounded text-sm font-mono">
-                  @{defaultInstagram.replace('@', '')}
-                </code>
-                <Button
-                  onClick={handleInstagram}
-                  variant="outline"
-                  className="border-pink-500 text-pink-600 hover:bg-pink-50"
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Open
-                </Button>
+            )}
+
+            {/* Instagram Section - Optional */}
+            {instagramHandle && (
+              <div className="p-4 border rounded-lg hover:border-pink-500 transition-colors">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-pink-500/10 rounded-lg">
+                      <Instagram className="h-5 w-5 text-pink-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Instagram</h3>
+                      <p className="text-sm text-muted-foreground">View profile</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 px-3 py-2 bg-muted rounded text-sm font-mono">
+                    @{defaultInstagram.replace('@', '')}
+                  </code>
+                  <Button
+                    onClick={handleInstagram}
+                    variant="outline"
+                    className="border-pink-500 text-pink-600 hover:bg-pink-50"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Phone Section */}
             <div className="p-4 border rounded-lg hover:border-primary transition-colors">

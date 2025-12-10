@@ -11,9 +11,9 @@ import { Switch } from "@/components/ui/switch"
 import { Progress } from "@/components/ui/progress"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/hooks/use-toast"
-import { firebaseDb, firebaseStorage, isFirebaseConfigured } from "@/lib/firebaseClient"
-import { doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore"
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
+import { platformDb, platformStorage, isSupabaseConfigured } from "@/lib/platformClient"
+import { doc, setDoc, updateDoc, serverTimestamp } from "@/lib/platformStubs/firestore"
+import { ref, uploadBytes, getDownloadURL } from "@/lib/platformStubs/storage"
 import { 
   Upload,
   X,
@@ -205,23 +205,23 @@ export function PromptForm({ initialData, onSave, onCancel, mode = 'create' }: P
       let fileUrl = formData.fileUrl
 
       // Upload preview image if new file is selected
-      if (formData.previewImageFile && firebaseStorage) {
+      if (formData.previewImageFile && platformStorage) {
         setIsUploading(true)
-        const imageRef = ref(firebaseStorage, `prompts/${currentUser.uid}/${Date.now()}_preview.jpg`)
+        const imageRef = ref(platformStorage, `prompts/${currentUser.uid}/${Date.now()}_preview.jpg`)
         const imageSnapshot = await uploadBytes(imageRef, formData.previewImageFile)
         previewImageUrl = await getDownloadURL(imageSnapshot.ref)
         setUploadProgress(50)
       }
 
       // Upload additional file if selected
-      if (formData.fileUpload && firebaseStorage) {
-        const fileRef = ref(firebaseStorage, `prompts/${currentUser.uid}/${Date.now()}_${formData.fileUpload.name}`)
+      if (formData.fileUpload && platformStorage) {
+        const fileRef = ref(platformStorage, `prompts/${currentUser.uid}/${Date.now()}_${formData.fileUpload.name}`)
         const fileSnapshot = await uploadBytes(fileRef, formData.fileUpload)
         fileUrl = await getDownloadURL(fileSnapshot.ref)
         setUploadProgress(100)
       }
 
-      if (!isFirebaseConfigured || !firebaseDb) {
+      if (!isSupabaseConfigured || !platformDb) {
         // Mock save for demo mode
         const mockPromptId = `prompt_${Date.now()}`
         success("Prompt saved", "Your prompt has been saved successfully (demo mode)")
@@ -248,12 +248,12 @@ export function PromptForm({ initialData, onSave, onCancel, mode = 'create' }: P
 
       if (mode === 'edit' && initialData?.id) {
         // Update existing prompt
-        const promptRef = doc(firebaseDb, 'prompts', initialData.id)
+        const promptRef = doc(platformDb, 'prompts', initialData.id)
         await updateDoc(promptRef, promptData)
         success("Prompt updated", "Your prompt has been updated successfully")
       } else {
         // Create new prompt
-        const promptRef = doc(firebaseDb, 'prompts')
+        const promptRef = doc(platformDb, 'prompts')
         await setDoc(promptRef, promptData)
         success("Prompt created", "Your prompt has been created successfully")
       }

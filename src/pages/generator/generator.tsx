@@ -11,8 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Stepper } from "@/components/ui/stepper"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/context/AuthContext"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
-import { doc, setDoc, serverTimestamp } from "firebase/firestore"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
+import { doc, setDoc, serverTimestamp } from "@/lib/platformStubs/firestore"
 
 const steps = ["AI Model", "Topic", "Context", "Preview"]
 
@@ -144,11 +144,11 @@ Please provide a comprehensive response that addresses the topic with the specif
         success("Prompt saved!", "Login to save in your library")
         return
       }
-      if (!isFirebaseConfigured || !firebaseDb) {
+      if (!isSupabaseConfigured || !platformDb) {
         success("Demo Mode", "Would save to your library in production")
         return
       }
-      const promptRef = doc(firebaseDb, 'prompts')
+      const promptRef = doc(platformDb, 'prompts')
       await setDoc(promptRef, {
         uid: currentUser.uid,
         title: data.topic || 'Untitled Prompt',

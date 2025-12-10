@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -26,7 +26,7 @@ import {
 
 export function HelpPage() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [searchPlaceholder, setSearchPlaceholder] = useState("Search for help articles...")
+  const [searchPlaceholder] = useState("Search for help articles...")
   const { success } = useToast()
 
   const categories = [
@@ -119,6 +119,52 @@ export function HelpPage() {
     }
   ]
 
+  const knowledgeBase = [
+    {
+      title: "Building buyer-ready prompt kits",
+      summary: "Structure kits, docs, and governance for teams in PNX Marketplace.",
+      category: "Prompts & Marketplace",
+      author: "Haider Shabbir",
+      readTime: "6 min",
+      id: "kb-buyer-kits"
+    },
+    {
+      title: "Secure API publishing checklist",
+      summary: "Checklist for shipping production-safe prompt APIs and automations.",
+      category: "API & Automations",
+      author: "Haider Shabbir",
+      readTime: "5 min",
+      id: "kb-api-checklist"
+    },
+    {
+      title: "Launch your workspace in 15 minutes",
+      summary: "Create buyer workspaces, invite collaborators, and set visibility.",
+      category: "Buyer Workspaces",
+      author: "Haider Shabbir",
+      readTime: "7 min",
+      id: "kb-workspace-launch"
+    },
+    {
+      title: "Designing multi-step generators",
+      summary: "Use Generator Studio blueprints for complex, repeatable flows.",
+      category: "Generator Studio",
+      author: "Haider Shabbir",
+      readTime: "8 min",
+      id: "kb-multi-step"
+    }
+  ]
+
+  const filteredArticles = useMemo(() => {
+    if (!searchQuery.trim()) return knowledgeBase
+    const q = searchQuery.toLowerCase()
+    return knowledgeBase.filter(article =>
+      article.title.toLowerCase().includes(q) ||
+      article.summary.toLowerCase().includes(q) ||
+      article.category.toLowerCase().includes(q) ||
+      article.author.toLowerCase().includes(q)
+    )
+  }, [knowledgeBase, searchQuery])
+
   const filteredCategories = categories.filter(category =>
     category.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     category.description.toLowerCase().includes(searchQuery.toLowerCase())
@@ -127,7 +173,7 @@ export function HelpPage() {
   const handleSearch = (query: string) => {
     setSearchQuery(query)
     if (query.trim()) {
-      success("Searching...", `Found ${filteredCategories.length} categories matching "${query}"`)
+      success("Searching...", `Found ${filteredArticles.length} articles matching "${query}"`)
     }
   }
 
@@ -176,21 +222,21 @@ export function HelpPage() {
               Find answers to your questions, learn how to use our features, and get the most out of PromptX.
             </motion.p>
 
-            {/* Search Bar */}
+            {/* Search Bar (sticky) */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.5 }}
-              className="max-w-2xl mx-auto"
+              className="max-w-2xl mx-auto sticky top-6 z-10"
             >
-              <div className="relative">
+              <div className="relative rounded-xl border bg-background/80 backdrop-blur">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
                   type="text"
                   placeholder={searchPlaceholder}
                   value={searchQuery}
                   onChange={(e) => handleSearch(e.target.value)}
-                  className="w-full pl-12 pr-4 py-4 h-14 text-lg border-2 focus:border-primary/50 transition-all duration-300 focus:shadow-lg"
+                  className="w-full pl-12 pr-4 py-4 h-14 text-lg border-0 focus:border-primary/50 transition-all duration-300 focus:shadow-lg"
                 />
                 <Button
                   variant="ghost"
@@ -352,6 +398,47 @@ export function HelpPage() {
             </motion.div>
           )}
         </motion.div>
+
+        {/* Founder-authored Knowledge Base */}
+        <div className="mb-16">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-3xl font-bold">Knowledge base by Haider Shabbir</h2>
+              <p className="text-muted-foreground">Founder-authored guides for PNX buyers and builders.</p>
+            </div>
+            <Badge variant="outline" className="text-xs">PNX Insider</Badge>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {filteredArticles.map((article, index) => (
+              <motion.div
+                key={article.id}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 * index }}
+                whileHover={{ y: -4 }}
+              >
+                <Card className="h-full border-primary/10 hover:border-primary/30 transition-colors cursor-pointer">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
+                      <span>{article.category}</span>
+                      <span>{article.readTime} read</span>
+                    </div>
+                    <CardTitle className="text-xl">{article.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-muted-foreground space-y-3">
+                    <p>{article.summary}</p>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Badge variant="secondary">Haider Shabbir</Badge>
+                      <ArrowRight className="h-4 w-4 text-primary" />
+                      <span className="text-primary font-medium">Open article</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        </div>
 
         {/* Contact Support */}
         <motion.div

@@ -3,8 +3,6 @@ import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/hooks/use-toast"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp } from "firebase/firestore"
 import { UserPlus, UserCheck, Loader2 } from "lucide-react"
 
 interface FollowButtonProps {
@@ -18,26 +16,20 @@ export function FollowButton({ sellerId, sellerName }: FollowButtonProps) {
   const [isFollowing, setIsFollowing] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
+  const storageKey = currentUser ? `promptnx:follows:${currentUser.uid}` : null
+
   useEffect(() => {
-    if (currentUser && isFirebaseConfigured && firebaseDb) {
-      checkFollowStatus()
+    if (!currentUser) {
+      setIsFollowing(false)
+      return
     }
-  }, [currentUser, sellerId])
-
-  const checkFollowStatus = async () => {
-    if (!currentUser || !isFirebaseConfigured || !firebaseDb) return
-
     try {
-      const userDoc = await getDoc(doc(firebaseDb, 'users', currentUser.uid))
-      if (userDoc.exists()) {
-        const userData = userDoc.data()
-        const following = userData.following || []
-        setIsFollowing(following.includes(sellerId))
-      }
-    } catch (err) {
-      console.error('Error checking follow status:', err)
+      const stored = storageKey ? JSON.parse(localStorage.getItem(storageKey) || '[]') : []
+      setIsFollowing(stored.includes(sellerId))
+    } catch {
+      setIsFollowing(false)
     }
-  }
+  }, [currentUser, sellerId, storageKey])
 
   const handleFollow = async () => {
     if (!currentUser) {
@@ -46,42 +38,25 @@ export function FollowButton({ sellerId, sellerName }: FollowButtonProps) {
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
-      // Mock functionality for demo mode
-      handleMockFollow()
-      return
-    }
-
     setIsLoading(true)
 
     try {
-      const currentUserRef = doc(firebaseDb, 'users', currentUser.uid)
-      const sellerRef = doc(firebaseDb, 'users', sellerId)
+      const stored: string[] = storageKey
+        ? JSON.parse(localStorage.getItem(storageKey) || '[]')
+        : []
 
       if (isFollowing) {
-        // Unfollow
-        await updateDoc(currentUserRef, {
-          following: arrayRemove(sellerId),
-          updatedAt: serverTimestamp()
-        })
-        await updateDoc(sellerRef, {
-          followers: arrayRemove(currentUser.uid),
-          updatedAt: serverTimestamp()
-        })
-        
+        const updated = stored.filter(id => id !== sellerId)
+        if (storageKey) {
+          localStorage.setItem(storageKey, JSON.stringify(updated))
+        }
         setIsFollowing(false)
         success("Unfollowed", `You unfollowed ${sellerName}`)
       } else {
-        // Follow
-        await updateDoc(currentUserRef, {
-          following: arrayUnion(sellerId),
-          updatedAt: serverTimestamp()
-        })
-        await updateDoc(sellerRef, {
-          followers: arrayUnion(currentUser.uid),
-          updatedAt: serverTimestamp()
-        })
-        
+        const updated = Array.from(new Set([...stored, sellerId]))
+        if (storageKey) {
+          localStorage.setItem(storageKey, JSON.stringify(updated))
+        }
         setIsFollowing(true)
         success("Following!", `You are now following ${sellerName}`)
       }
@@ -90,16 +65,6 @@ export function FollowButton({ sellerId, sellerName }: FollowButtonProps) {
       error("Follow failed", err.message || "Failed to follow user. Please try again.")
     } finally {
       setIsLoading(false)
-    }
-  }
-
-  const handleMockFollow = () => {
-    if (isFollowing) {
-      setIsFollowing(false)
-      success("Unfollowed", `You unfollowed ${sellerName}`)
-    } else {
-      setIsFollowing(true)
-      success("Following!", `You are now following ${sellerName}`)
     }
   }
 

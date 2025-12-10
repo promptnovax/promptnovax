@@ -12,8 +12,8 @@ import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar"
 import { DashboardOverview } from "@/components/dashboard/DashboardOverview"
 import { PromptList } from "@/components/prompts/PromptList"
 import { EditProfileModal } from "@/components/dashboard/EditProfileModal"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
-import { doc, getDoc, collection, query, where, getDocs, orderBy } from "firebase/firestore"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
+import { doc, getDoc, collection, query, where, getDocs, orderBy } from "@/lib/platformStubs/firestore"
 import { 
   ArrowLeft,
   Edit,
@@ -82,7 +82,7 @@ export function DashboardIndex() {
   const loadUserData = async () => {
     if (!currentUser) return
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Mock data for demo mode
       loadMockData()
       return
@@ -92,7 +92,7 @@ export function DashboardIndex() {
       setIsLoading(true)
 
       // Load user data
-      const userDoc = await getDoc(doc(firebaseDb, 'users', currentUser.uid))
+      const userDoc = await getDoc(doc(platformDb, 'users', currentUser.uid))
       let userData: UserData
 
       if (userDoc.exists()) {
@@ -118,7 +118,7 @@ export function DashboardIndex() {
 
       // Load user's prompts
       const promptsQuery = query(
-        collection(firebaseDb, 'prompts'),
+        collection(platformDb, 'prompts'),
         where('sellerId', '==', currentUser.uid),
         orderBy('createdAt', 'desc')
       )
@@ -143,7 +143,7 @@ export function DashboardIndex() {
       // Load followers
       if (userData.followers.length > 0) {
         const followersQuery = query(
-          collection(firebaseDb, 'users'),
+          collection(platformDb, 'users'),
           where('__name__', 'in', userData.followers.slice(0, 10))
         )
         const followersSnapshot = await getDocs(followersQuery)
@@ -157,7 +157,7 @@ export function DashboardIndex() {
       // Load following
       if (userData.following.length > 0) {
         const followingQuery = query(
-          collection(firebaseDb, 'users'),
+          collection(platformDb, 'users'),
           where('__name__', 'in', userData.following.slice(0, 10))
         )
         const followingSnapshot = await getDocs(followingQuery)

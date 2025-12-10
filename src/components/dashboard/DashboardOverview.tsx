@@ -9,8 +9,8 @@ import {
   where, 
   getDocs,
   onSnapshot
-} from "firebase/firestore"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
+} from "@/lib/platformStubs/firestore"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
 import { 
   FileText,
   Users,
@@ -51,7 +51,7 @@ export function DashboardOverview() {
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - show mock data
       setStats({
         totalPrompts: 12,
@@ -70,7 +70,7 @@ export function DashboardOverview() {
 
       // Get user's prompts
       const promptsQuery = query(
-        collection(firebaseDb, 'prompts'),
+        collection(platformDb, 'prompts'),
         where('uid', '==', currentUser.uid)
       )
       const promptsSnapshot = await getDocs(promptsQuery)
@@ -83,7 +83,7 @@ export function DashboardOverview() {
 
       // Get user's follower count
       const userQuery = query(
-        collection(firebaseDb, 'users'),
+        collection(platformDb, 'users'),
         where('__name__', '==', currentUser.uid)
       )
       const userSnapshot = await getDocs(userQuery)
@@ -92,7 +92,7 @@ export function DashboardOverview() {
 
       // Get conversations count (messages)
       const conversationsQuery = query(
-        collection(firebaseDb, 'conversations'),
+        collection(platformDb, 'conversations'),
         where('participants', 'array-contains', currentUser.uid)
       )
       const conversationsSnapshot = await getDocs(conversationsQuery)

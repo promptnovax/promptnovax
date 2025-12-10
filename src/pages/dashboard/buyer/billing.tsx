@@ -113,29 +113,49 @@ export function BuyerBillingPage() {
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-12 text-xs text-muted-foreground px-3">
+            <div className="hidden md:grid grid-cols-12 text-xs text-muted-foreground px-3">
               <span className="col-span-3">Invoice</span>
               <span className="col-span-3">Period</span>
               <span className="col-span-2 text-right">Amount</span>
               <span className="col-span-2">Issued</span>
               <span className="col-span-2 text-right">Status</span>
             </div>
-          <Separator />
-            <div className="divide-y">
+            <div className="md:hidden flex flex-wrap gap-3 text-xs text-muted-foreground px-3">
+              <span className="flex-1 min-w-[120px] font-medium">Invoice</span>
+              <span className="flex-1 min-w-[120px] font-medium text-right">Details</span>
+            </div>
+            <Separator />
+            <div className="divide-y rounded-xl border border-border/40">
               {invoices.map((invoice, index) => (
                 <motion.div
                   key={invoice.id}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  className="grid grid-cols-12 items-center px-3 py-4 text-sm"
+                  className="px-3 py-4 text-sm"
                 >
-                  <div className="col-span-3 font-medium">{invoice.id}</div>
-                  <div className="col-span-3">{invoice.period}</div>
-                  <div className="col-span-2 text-right font-semibold">{formatCurrency(invoice.amount)}</div>
-                  <div className="col-span-2 text-muted-foreground">{invoice.issuedOn}</div>
-                  <div className="col-span-2 flex justify-end">
-                    {statusBadge(invoice.status)}
+                  <div className="hidden md:grid grid-cols-12 items-center">
+                    <div className="col-span-3 font-medium">{invoice.id}</div>
+                    <div className="col-span-3">{invoice.period}</div>
+                    <div className="col-span-2 text-right font-semibold">{formatCurrency(invoice.amount)}</div>
+                    <div className="col-span-2 text-muted-foreground">{invoice.issuedOn}</div>
+                    <div className="col-span-2 flex justify-end">
+                      {statusBadge(invoice.status)}
+                    </div>
+                  </div>
+                  <div className="md:hidden space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{invoice.id}</span>
+                      {statusBadge(invoice.status)}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{invoice.period}</span>
+                      <span>{invoice.issuedOn}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground text-xs">Amount</span>
+                      <span className="font-semibold">{formatCurrency(invoice.amount)}</span>
+                    </div>
                   </div>
                 </motion.div>
               ))}
@@ -211,7 +231,7 @@ export function BuyerBillingPage() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="transactions">
-            <TabsList className="grid grid-cols-3">
+            <TabsList className="grid grid-cols-1 sm:grid-cols-3">
               <TabsTrigger value="transactions">Transactions</TabsTrigger>
               <TabsTrigger value="workflows">Workflow costs</TabsTrigger>
               <TabsTrigger value="compliance">Compliance</TabsTrigger>

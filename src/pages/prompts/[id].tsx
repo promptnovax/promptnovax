@@ -8,9 +8,9 @@ import { Separator } from "@/components/ui/separator"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 import { ContactButtons } from "@/components/contact/ContactButtons"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
 import { generateProductImage, generateProductImageGallery, generateProductThumbnail, getCategoryPlaceholder } from "@/lib/marketplaceImages"
-import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp, collection, query, where, getDocs, addDoc, orderBy, limit } from "firebase/firestore"
+import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp, collection, query, where, getDocs, addDoc, orderBy, limit } from "@/lib/platformStubs/firestore"
 import { 
   ArrowLeft,
   Heart,
@@ -79,7 +79,7 @@ export function PromptDetailPage({ id }: PromptDetailPageProps) {
   }, [id])
 
   const loadPrompt = async () => {
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Mock data for demo mode
       loadMockData()
       return
@@ -87,7 +87,7 @@ export function PromptDetailPage({ id }: PromptDetailPageProps) {
 
     try {
       setLoading(true)
-      const promptRef = doc(firebaseDb, 'prompts', id)
+      const promptRef = doc(platformDb, 'prompts', id)
       const promptSnap = await getDoc(promptRef)
 
       if (!promptSnap.exists()) {
@@ -102,7 +102,7 @@ export function PromptDetailPage({ id }: PromptDetailPageProps) {
       // Fetch creator info
       if (data.uid) {
         try {
-          const userRef = doc(firebaseDb, 'users', data.uid)
+          const userRef = doc(platformDb, 'users', data.uid)
           const userSnap = await getDoc(userRef)
           if (userSnap.exists()) {
             const userData = userSnap.data()
@@ -202,7 +202,7 @@ export function PromptDetailPage({ id }: PromptDetailPageProps) {
 
   // Load related prompts
   useEffect(() => {
-    if (prompt && isFirebaseConfigured && firebaseDb) {
+    if (prompt && isSupabaseConfigured && platformDb) {
       loadRelatedPrompts()
     }
   }, [prompt])
@@ -213,7 +213,7 @@ export function PromptDetailPage({ id }: PromptDetailPageProps) {
       return
     }
 
-    if (!prompt || !isFirebaseConfigured || !firebaseDb) {
+    if (!prompt || !isSupabaseConfigured || !platformDb) {
       // Mock functionality for demo mode
       setPrompt(prev => prev ? {
         ...prev,
@@ -227,7 +227,7 @@ export function PromptDetailPage({ id }: PromptDetailPageProps) {
 
     setIsLiking(true)
     try {
-      const promptRef = doc(firebaseDb, 'prompts', prompt.id)
+      const promptRef = doc(platformDb, 'prompts', prompt.id)
       
       if (isLiked) {
         await updateDoc(promptRef, {
@@ -264,7 +264,7 @@ export function PromptDetailPage({ id }: PromptDetailPageProps) {
       return
     }
 
-    if (!prompt || !isFirebaseConfigured || !firebaseDb) {
+    if (!prompt || !isSupabaseConfigured || !platformDb) {
       // Mock functionality for demo mode
       setPrompt(prev => prev ? {
         ...prev,
@@ -278,7 +278,7 @@ export function PromptDetailPage({ id }: PromptDetailPageProps) {
 
     setIsSaving(true)
     try {
-      const promptRef = doc(firebaseDb, 'prompts', prompt.id)
+      const promptRef = doc(platformDb, 'prompts', prompt.id)
       
       if (isSaved) {
         await updateDoc(promptRef, {
@@ -350,11 +350,11 @@ export function PromptDetailPage({ id }: PromptDetailPageProps) {
   }
 
   const loadRelatedPrompts = async () => {
-    if (!prompt || !isFirebaseConfigured || !firebaseDb) return
+    if (!prompt || !isSupabaseConfigured || !platformDb) return
     
     try {
       const relatedQuery = query(
-        collection(firebaseDb, 'prompts'),
+        collection(platformDb, 'prompts'),
         where('category', '==', prompt.category),
         where('visibility', '==', true),
         orderBy('createdAt', 'desc'),
@@ -372,7 +372,7 @@ export function PromptDetailPage({ id }: PromptDetailPageProps) {
         
         if (data.uid) {
           try {
-            const userRef = doc(firebaseDb, 'users', data.uid)
+            const userRef = doc(platformDb, 'users', data.uid)
             const userSnap = await getDoc(userRef)
             if (userSnap.exists()) {
               const userData = userSnap.data()

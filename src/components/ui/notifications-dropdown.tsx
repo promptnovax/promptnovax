@@ -8,18 +8,6 @@ import { Separator } from "@/components/ui/separator"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 import { 
-  collection, 
-  query, 
-  where, 
-  orderBy, 
-  limit,
-  onSnapshot,
-  updateDoc,
-  doc,
-  getDocs
-} from "firebase/firestore"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
-import { 
   Bell,
   Heart,
   UserPlus,
@@ -63,72 +51,7 @@ export function NotificationsDropdown({ isOpen, onClose }: NotificationsDropdown
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
-      // Demo mode - show mock data
-      loadMockNotifications()
-      return
-    }
-
-    try {
-      setLoading(true)
-
-      const notificationsRef = collection(firebaseDb, 'notifications')
-      const notificationsQuery = query(
-        notificationsRef,
-        where('recipientId', '==', currentUser.uid),
-        orderBy('createdAt', 'desc'),
-        limit(10)
-      )
-
-      const unsubscribe = onSnapshot(notificationsQuery, async (snapshot) => {
-        const notificationList: Notification[] = []
-
-        for (const doc of snapshot.docs) {
-          const data = doc.data()
-          
-          // Fetch sender info
-          let senderName = "Unknown User"
-          let senderAvatar = ""
-
-          try {
-            const userQuery = query(
-              collection(firebaseDb, 'users'),
-              where('__name__', '==', data.senderId)
-            )
-            const userSnapshot = await getDocs(userQuery)
-            if (!userSnapshot.empty) {
-              const userData = userSnapshot.docs[0].data()
-              senderName = userData.displayName || userData.email?.split('@')[0] || "Unknown User"
-              senderAvatar = userData.photoURL || ""
-            }
-          } catch (err) {
-            console.error('Error fetching user data:', err)
-          }
-
-          notificationList.push({
-            id: doc.id,
-            recipientId: data.recipientId,
-            senderId: data.senderId,
-            type: data.type,
-            referenceId: data.referenceId,
-            message: data.message,
-            read: data.read,
-            createdAt: data.createdAt,
-            senderName,
-            senderAvatar
-          })
-        }
-
-        setNotifications(notificationList)
-        setLoading(false)
-      })
-
-      return unsubscribe
-    } catch (err: any) {
-      console.error('Error loading notifications:', err)
-      error("Loading failed", "Failed to load notifications")
-      setLoading(false)
-    }
+    loadMockNotifications()
   }
 
   // Load mock data for demo mode
@@ -178,26 +101,13 @@ export function NotificationsDropdown({ isOpen, onClose }: NotificationsDropdown
 
   // Mark notification as read
   const markAsRead = async (notificationId: string) => {
-    if (!isFirebaseConfigured || !firebaseDb) {
-      // Demo mode - just update local state
-      setNotifications(prev => 
-        prev.map(notif => 
-          notif.id === notificationId ? { ...notif, read: true } : notif
-        )
-      )
-      return
-    }
-
     setMarkingAsRead(notificationId)
-    try {
-      const notificationRef = doc(firebaseDb, 'notifications', notificationId)
-      await updateDoc(notificationRef, { read: true })
-    } catch (err: any) {
-      console.error('Error marking notification as read:', err)
-      error("Error", "Failed to mark notification as read")
-    } finally {
-      setMarkingAsRead(null)
-    }
+    setNotifications(prev => 
+      prev.map(notif => 
+        notif.id === notificationId ? { ...notif, read: true } : notif
+      )
+    )
+    setTimeout(() => setMarkingAsRead(null), 300)
   }
 
   // Handle notification click
@@ -225,12 +135,7 @@ export function NotificationsDropdown({ isOpen, onClose }: NotificationsDropdown
 
   // Load notifications on mount
   useEffect(() => {
-    const unsubscribe = loadNotifications()
-    return () => {
-      if (unsubscribe) {
-        unsubscribe()
-      }
-    }
+    loadNotifications()
   }, [currentUser])
 
   const formatTime = (date: any) => {

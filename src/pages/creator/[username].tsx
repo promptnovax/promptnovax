@@ -16,8 +16,8 @@ import {
   updateDoc,
   arrayUnion,
   arrayRemove
-} from "firebase/firestore"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
+} from "@/lib/platformStubs/firestore"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
 import { 
   User,
   Users,
@@ -60,7 +60,7 @@ export function CreatorProfilePage({ username }: CreatorProfilePageProps) {
 
   // Load creator data
   const loadCreatorData = async () => {
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - show mock data
       loadMockCreatorData()
       return
@@ -70,7 +70,7 @@ export function CreatorProfilePage({ username }: CreatorProfilePageProps) {
       setLoading(true)
 
       // Try to find user by username first, then by uid
-      const usersRef = collection(firebaseDb, 'users')
+      const usersRef = collection(platformDb, 'users')
       let userQuery = query(usersRef, where('username', '==', username))
       let userSnapshot = await getDocs(userQuery)
 
@@ -140,7 +140,7 @@ export function CreatorProfilePage({ username }: CreatorProfilePageProps) {
   const handleFollowToggle = async () => {
     if (!currentUser || !creator) return
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - just update local state
       setFollowing(!following)
       success(
@@ -152,8 +152,8 @@ export function CreatorProfilePage({ username }: CreatorProfilePageProps) {
 
     setFollowLoading(true)
     try {
-      const currentUserRef = doc(firebaseDb, 'users', currentUser.uid)
-      const creatorRef = doc(firebaseDb, 'users', creator.uid)
+      const currentUserRef = doc(platformDb, 'users', currentUser.uid)
+      const creatorRef = doc(platformDb, 'users', creator.uid)
       
       if (following) {
         // Unfollow

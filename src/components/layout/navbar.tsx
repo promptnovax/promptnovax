@@ -38,13 +38,6 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/hooks/use-toast"
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot 
-} from "firebase/firestore"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
 import { BrandLogo } from "@/components/visuals/BrandLogo"
 
 interface NavbarProps {
@@ -65,24 +58,8 @@ export function Navbar({ currentPage }: NavbarProps) {
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
-      // Demo mode - show mock count
-      setUnreadCount(2)
-      return
-    }
-
-    const notificationsRef = collection(firebaseDb, 'notifications')
-    const notificationsQuery = query(
-      notificationsRef,
-      where('recipientId', '==', currentUser.uid),
-      where('read', '==', false)
-    )
-
-    const unsubscribe = onSnapshot(notificationsQuery, (snapshot) => {
-      setUnreadCount(snapshot.docs.length)
-    })
-
-    return () => unsubscribe()
+    // Demo mode - show constant mock count
+    setUnreadCount(2)
   }, [currentUser])
 
   const handleLogout = async () => {

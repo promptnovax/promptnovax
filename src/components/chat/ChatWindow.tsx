@@ -8,19 +8,15 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/context/AuthContext"
 import { useGuestChat } from "@/context/GuestChatContext"
 import { useToast } from "@/hooks/use-toast"
-import { 
-  collection, 
-  query, 
-  orderBy, 
-  onSnapshot,
-  addDoc,
-  updateDoc,
-  doc,
-  serverTimestamp,
-  getDocs,
-  where
-} from "firebase/firestore"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu"
+
 import { 
   Send,
   Loader2,
@@ -35,13 +31,12 @@ import {
   ImageIcon,
   FileText,
   Clock,
-  Phone,
-  Video,
   Info,
   Star,
   Verified,
   Copy,
-  Trash2
+  Trash2,
+  X
 } from "lucide-react"
 
 interface Message {
@@ -61,10 +56,12 @@ interface ChatWindowProps {
     name: string
     avatar?: string
   }
+  isDashboard?: boolean // If true, skip login prompts
 }
 
-export function ChatWindow({ conversationId, otherParticipant }: ChatWindowProps) {
+export function ChatWindow({ conversationId, otherParticipant, isDashboard = false }: ChatWindowProps) {
   const { currentUser } = useAuth()
+  // GuestChatProvider wraps messages pages, so this is safe
   const { guestUser, isGuest } = useGuestChat()
   const { success, error } = useToast()
   const [messages, setMessages] = useState<Message[]>([])
@@ -74,16 +71,27 @@ export function ChatWindow({ conversationId, otherParticipant }: ChatWindowProps
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isTyping, setIsTyping] = useState(false)
   const [showAttachments, setShowAttachments] = useState(false)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showProfileCard, setShowProfileCard] = useState(false)
+  const [showDetailsPanel, setShowDetailsPanel] = useState(false)
+  const [isStarred, setIsStarred] = useState(false)
+  const [isArchived, setIsArchived] = useState(false)
+  const [selectedMediaName, setSelectedMediaName] = useState<string | null>(null)
+  const [selectedDocumentName, setSelectedDocumentName] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const mediaInputRef = useRef<HTMLInputElement>(null)
+  const docInputRef = useRef<HTMLInputElement>(null)
+
+  const METADATA_STORAGE_KEY = "promptnx-chat-metadata"
   
   // Determine current user (logged in or guest)
   const currentUserId = currentUser?.uid || guestUser?.id || "guest"
   const currentUserName = currentUser?.displayName || currentUser?.email?.split('@')[0] || guestUser?.name || "Guest User"
   const currentUserAvatar = currentUser?.photoURL || guestUser?.avatar || ""
   
-  const canSendMessages = !!currentUser || !!guestUser
+  // In dashboard context, assume user is logged in
+  const canSendMessages = isDashboard ? !!currentUser : (!!currentUser || !!guestUser)
 
   // Auto-scroll to bottom
   const scrollToBottom = () => {
@@ -95,72 +103,12 @@ export function ChatWindow({ conversationId, otherParticipant }: ChatWindowProps
   }, [messages])
 
   // Load messages
-  const loadMessages = async () => {
-    if (!currentUser || !conversationId) {
+  const loadMessages = () => {
+    if (!conversationId) {
       setLoading(false)
       return
     }
-
-    if (!isFirebaseConfigured || !firebaseDb) {
-      // Demo mode - show mock data
-      loadMockMessages()
-      return
-    }
-
-    try {
-      setLoading(true)
-      setErrorMessage(null)
-
-      const messagesRef = collection(firebaseDb, 'conversations', conversationId, 'messages')
-      const messagesQuery = query(messagesRef, orderBy('createdAt', 'asc'))
-
-      const unsubscribe = onSnapshot(messagesQuery, async (snapshot) => {
-        const messageList: Message[] = []
-
-        for (const doc of snapshot.docs) {
-          const data = doc.data()
-          
-          // Fetch sender info
-          let senderName = "Unknown User"
-          let senderAvatar = ""
-
-          try {
-            const userQuery = query(
-              collection(firebaseDb, 'users'),
-              where('__name__', '==', data.senderId)
-            )
-            const userSnapshot = await getDocs(userQuery)
-            if (!userSnapshot.empty) {
-              const userData = userSnapshot.docs[0].data()
-              senderName = userData.displayName || userData.email?.split('@')[0] || "Unknown User"
-              senderAvatar = userData.photoURL || ""
-            }
-          } catch (err) {
-            console.error('Error fetching user data:', err)
-          }
-
-          messageList.push({
-            id: doc.id,
-            senderId: data.senderId,
-            text: data.text,
-            createdAt: data.createdAt,
-            read: data.read,
-            senderName,
-            senderAvatar
-          })
-        }
-
-        setMessages(messageList)
-        setLoading(false)
-      })
-
-      return unsubscribe
-    } catch (err: any) {
-      console.error('Error loading messages:', err)
-      setErrorMessage(err.message || "Failed to load messages")
-      error("Loading failed", "Failed to load messages")
-      setLoading(false)
-    }
+    loadMockMessages()
   }
 
   // Load mock data for demo mode
@@ -212,72 +160,21 @@ export function ChatWindow({ conversationId, otherParticipant }: ChatWindowProps
   const sendMessage = async () => {
     if (!newMessage.trim() || !canSendMessages || !conversationId) return
 
-    if (!isFirebaseConfigured || !firebaseDb) {
-      // Demo mode - just add to local state
-      const demoMessage: Message = {
-        id: `demo-${Date.now()}`,
-        senderId: currentUserId,
-        text: newMessage,
-        createdAt: new Date(),
-        read: false,
-        senderName: currentUserName,
-        senderAvatar: currentUserAvatar
-      }
-      setMessages(prev => [...prev, demoMessage])
-      setNewMessage("")
-      
-      // Simulate typing indicator
-      setIsTyping(true)
-      setTimeout(() => {
-        setIsTyping(false)
-        // Simulate response for demo
-        if (otherParticipant) {
-          const response: Message = {
-            id: `demo-response-${Date.now()}`,
-            senderId: otherParticipant.uid,
-            text: "Thanks for your message! I'll get back to you shortly.",
-            createdAt: new Date(),
-            read: false,
-            senderName: otherParticipant.name,
-            senderAvatar: otherParticipant.avatar
-          }
-          setMessages(prev => [...prev, response])
-        }
-      }, 2000)
-      return
-    }
-
     setSending(true)
-    
-    try {
-      // Add message to subcollection
-      const messagesRef = collection(firebaseDb, 'conversations', conversationId, 'messages')
-      await addDoc(messagesRef, {
-        senderId: currentUserId,
-        text: newMessage.trim(),
-        createdAt: serverTimestamp(),
-        read: false
-      })
 
-      // Update conversation's lastMessage and updatedAt
-      const conversationRef = doc(firebaseDb, 'conversations', conversationId)
-      await updateDoc(conversationRef, {
-        lastMessage: {
-          text: newMessage.trim(),
-          senderId: currentUserId,
-          createdAt: serverTimestamp()
-        },
-        updatedAt: serverTimestamp()
-      })
-
-      setNewMessage("")
-      success("Message sent", "Your message has been sent")
-    } catch (err: any) {
-      console.error('Error sending message:', err)
-      error("Send failed", err.message || "Failed to send message")
-    } finally {
-      setSending(false)
+    const demoMessage: Message = {
+      id: `demo-${Date.now()}`,
+      senderId: currentUserId,
+      text: newMessage,
+      createdAt: new Date(),
+      read: false,
+      senderName: currentUserName,
+      senderAvatar: currentUserAvatar
     }
+    setMessages(prev => [...prev, demoMessage])
+    setNewMessage("")
+    success("Message sent", "Your message has been sent")
+    setSending(false)
   }
 
   // Handle Enter key
@@ -291,12 +188,7 @@ export function ChatWindow({ conversationId, otherParticipant }: ChatWindowProps
   // Load messages on mount
   useEffect(() => {
     if (canSendMessages) {
-      const unsubscribe = loadMessages()
-      return () => {
-        if (unsubscribe) {
-          unsubscribe()
-        }
-      }
+      loadMessages()
     } else {
       setLoading(false)
     }
@@ -325,7 +217,102 @@ export function ChatWindow({ conversationId, otherParticipant }: ChatWindowProps
     success("Copied", "Message copied to clipboard")
   }
 
-  if (!canSendMessages) {
+  // Conversation metadata helpers (starred / archived)
+  const loadConversationMeta = () => {
+    if (typeof window === "undefined" || !conversationId) return
+    try {
+      const raw = window.localStorage.getItem(METADATA_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as Record<string, { starred?: boolean; archived?: boolean }>
+      const meta = parsed[conversationId]
+      if (meta) {
+        setIsStarred(Boolean(meta.starred))
+        setIsArchived(Boolean(meta.archived))
+      } else {
+        setIsStarred(false)
+        setIsArchived(false)
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const updateConversationMeta = (patch: { starred?: boolean; archived?: boolean }) => {
+    if (typeof window === "undefined" || !conversationId) return
+    try {
+      const raw = window.localStorage.getItem(METADATA_STORAGE_KEY)
+      const parsed = raw ? (JSON.parse(raw) as Record<string, { starred?: boolean; archived?: boolean }>) : {}
+      const existing = parsed[conversationId] || {}
+      const next = { ...existing, ...patch }
+      parsed[conversationId] = next
+      window.localStorage.setItem(METADATA_STORAGE_KEY, JSON.stringify(parsed))
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleToggleStar = () => {
+    const next = !isStarred
+    setIsStarred(next)
+    updateConversationMeta({ starred: next })
+    success(next ? "Chat starred" : "Star removed", next ? "This chat is now in Starred." : "Removed from Starred.")
+  }
+
+  const handleArchiveChat = () => {
+    if (isArchived) return
+    setIsArchived(true)
+    updateConversationMeta({ archived: true })
+    success("Chat archived", "You can find this chat in Archived.")
+  }
+
+  const handleClearHistory = () => {
+    setMessages([])
+    success("Chat cleared", "Message history has been cleared for this session.")
+  }
+
+  const handleEmojiSelect = (emoji: string) => {
+    setNewMessage((prev) => prev + emoji)
+    setShowEmojiPicker(false)
+    inputRef.current?.focus()
+  }
+
+  const handleOpenMediaPicker = () => {
+    mediaInputRef.current?.click()
+  }
+
+  const handleOpenDocumentPicker = () => {
+    docInputRef.current?.click()
+  }
+
+  const handleMediaChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      setSelectedMediaName(file.name)
+      success("Media selected", file.name)
+    }
+  }
+
+  const handleDocumentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      setSelectedDocumentName(file.name)
+      success("Attachment selected", file.name)
+    }
+  }
+
+  const handleOpenProfile = () => {
+    if (otherParticipant?.uid) {
+      window.location.hash = `#user/${otherParticipant.uid}`
+    }
+  }
+
+  // Load conversation metadata when conversation changes
+  useEffect(() => {
+    loadConversationMeta()
+  }, [conversationId])
+
+  // Only show login prompt if not in dashboard context
+  if (!canSendMessages && !isDashboard) {
     return (
       <Card className="h-full">
         <CardContent className="py-16 text-center space-y-4">
@@ -403,64 +390,148 @@ export function ChatWindow({ conversationId, otherParticipant }: ChatWindowProps
   }
 
   return (
-    <Card className="h-full flex flex-col overflow-hidden">
+    <Card className="h-full flex flex-col overflow-hidden relative">
       {/* Professional Chat Header */}
       <div className="p-4 border-b bg-muted/30">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 flex-1">
-            <div className="relative">
-              <Avatar 
-                className="h-10 w-10 cursor-pointer hover:ring-2 hover:ring-primary/20 transition-all"
-                onClick={() => setShowProfileCard(!showProfileCard)}
-              >
-                <AvatarImage src={otherParticipant?.avatar} />
-                <AvatarFallback className="bg-primary/10 text-primary font-medium">
-                  {otherParticipant?.name?.charAt(0) || "U"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 border-2 border-background rounded-full"></div>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="font-semibold truncate">{otherParticipant?.name || "Unknown User"}</p>
-                <Badge variant="secondary" className="text-xs">
-                  <Verified className="h-3 w-3 mr-1" />
-                  Verified
-                </Badge>
+            <button
+              type="button"
+              className="flex items-center gap-3 flex-1 text-left focus:outline-none"
+              onClick={handleOpenProfile}
+            >
+              <div className="relative">
+                <Avatar 
+                  className="h-10 w-10 cursor-pointer hover:ring-2 hover:ring-primary/20 transition-all"
+                  onClick={() => setShowProfileCard(!showProfileCard)}
+                >
+                  <AvatarImage src={otherParticipant?.avatar} />
+                  <AvatarFallback className="bg-primary/10 text-primary font-medium">
+                    {otherParticipant?.name?.charAt(0) || "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 border-2 border-background rounded-full"></div>
               </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span>Active now</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold truncate">{otherParticipant?.name || "Unknown User"}</p>
+                  <Badge variant="secondary" className="text-xs">
+                    <Verified className="h-3 w-3 mr-1" />
+                    Verified
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span>Tap name to view profile</span>
+                </div>
               </div>
-            </div>
+            </button>
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-9 w-9">
-              <Phone className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-9 w-9">
-              <Video className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-9 w-9">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              onClick={() => setShowDetailsPanel((prev) => !prev)}
+            >
               <Info className="h-4 w-4" />
             </Button>
           </div>
         </div>
       </div>
 
+      {/* Right-side details panel (WhatsApp-style) */}
+      <AnimatePresence>
+        {showDetailsPanel && (
+          <motion.div
+            initial={{ x: 320, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 320, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute top-0 right-0 h-full w-72 bg-background border-l shadow-xl z-20 flex flex-col"
+          >
+            <div className="p-4 border-b flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold">Chat details</p>
+                <p className="text-xs text-muted-foreground">
+                  Manage this conversation&apos;s settings.
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => setShowDetailsPanel(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src={otherParticipant?.avatar} />
+                  <AvatarFallback>
+                    {otherParticipant?.name?.charAt(0) || "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-medium">{otherParticipant?.name || "Unknown User"}</p>
+                  <p className="text-xs text-muted-foreground">Tap header to view full profile</p>
+                </div>
+              </div>
+
+              <div className="border rounded-lg p-3 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase">Preferences</p>
+                <button className="w-full text-left text-sm py-1.5 rounded hover:bg-muted transition-colors">
+                  Mute notifications
+                </button>
+                <button
+                  className="w-full text-left text-sm py-1.5 rounded hover:bg-muted transition-colors"
+                  onClick={handleToggleStar}
+                >
+                  {isStarred ? "Remove from starred" : "Star this chat"}
+                </button>
+              </div>
+
+              <div className="border rounded-lg p-3 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase">Actions</p>
+                <button
+                  className="w-full text-left text-sm py-1.5 rounded hover:bg-muted transition-colors"
+                  onClick={handleClearHistory}
+                >
+                  Clear chat history
+                </button>
+                <button
+                  className="w-full text-left text-sm py-1.5 rounded hover:bg-muted transition-colors"
+                  onClick={handleArchiveChat}
+                >
+                  Archive chat
+                </button>
+                <button className="w-full text-left text-sm py-1.5 rounded hover:bg-muted text-destructive transition-colors">
+                  Block &amp; report
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Messages */}
-      <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-background to-muted/20">
+      <CardContent className="flex-1 overflow-y-auto px-4 py-3 bg-gradient-to-b from-background to-muted/20 flex flex-col">
         {messages.length === 0 ? (
-          <div className="text-center py-8">
-            <MessageCircle className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No messages yet</p>
-            <p className="text-sm text-muted-foreground">
-              Start the conversation by sending a message
-            </p>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center py-8">
+              <MessageCircle className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+              <p className="text-muted-foreground">No messages yet</p>
+              <p className="text-sm text-muted-foreground">
+                Start the conversation by sending a message
+              </p>
+            </div>
           </div>
         ) : (
           <>
-            <AnimatePresence>
+            <div className="mt-auto space-y-4">
+              <AnimatePresence>
               {messages.map((message, index) => {
                 const isOwn = message.senderId === currentUserId
                 const showAvatar = index === 0 || messages[index - 1]?.senderId !== message.senderId
@@ -558,37 +629,38 @@ export function ChatWindow({ conversationId, otherParticipant }: ChatWindowProps
                   </motion.div>
                 )
               })}
-            </AnimatePresence>
-            
-            {/* Typing Indicator */}
-            {isTyping && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex gap-2 items-end"
-              >
-                <Avatar className="h-8 w-8 flex-shrink-0">
-                  <AvatarImage src={otherParticipant?.avatar} />
-                  <AvatarFallback>
-                    {otherParticipant?.name?.charAt(0) || "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="bg-card border border-border rounded-2xl rounded-bl-sm px-4 py-3">
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              </AnimatePresence>
+              
+              {/* Typing Indicator */}
+              {isTyping && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex gap-2 items-end"
+                >
+                  <Avatar className="h-8 w-8 flex-shrink-0">
+                    <AvatarImage src={otherParticipant?.avatar} />
+                    <AvatarFallback>
+                      {otherParticipant?.name?.charAt(0) || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="bg-card border border-border rounded-2xl rounded-bl-sm px-4 py-3">
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
-            )}
+                </motion.div>
+              )}
+            </div>
           </>
         )}
         <div ref={messagesEndRef} />
       </CardContent>
 
       {/* Professional Message Input */}
-      <div className="p-4 border-t bg-background">
+      <div className="p-3 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:backdrop-blur-sm">
         <div className="flex items-end gap-2">
           <div className="flex items-center gap-1">
             <Button
@@ -599,13 +671,37 @@ export function ChatWindow({ conversationId, otherParticipant }: ChatWindowProps
             >
               <Paperclip className="h-4 w-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9"
-            >
-              <ImageIcon className="h-4 w-4" />
-            </Button>
+            <DropdownMenu open={showAttachments} onOpenChange={setShowAttachments}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="start">
+                <DropdownMenuLabel>Attach</DropdownMenuLabel>
+                <DropdownMenuItem onClick={handleOpenMediaPicker}>
+                  <ImageIcon className="h-3 w-3 mr-2" />
+                  Media (images / video)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleOpenDocumentPicker}>
+                  <FileText className="h-3 w-3 mr-2" />
+                  Document
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled>
+                  <Clock className="h-3 w-3 mr-2" />
+                  Location (coming soon)
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled>
+                  <Star className="h-3 w-3 mr-2" />
+                  Saved templates
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           
           <div className="flex-1 relative">
@@ -618,13 +714,34 @@ export function ChatWindow({ conversationId, otherParticipant }: ChatWindowProps
               disabled={sending}
               className="pr-12 rounded-full border-2 focus:border-primary/50"
             />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7"
-            >
-              <Smile className="h-4 w-4" />
-            </Button>
+            <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              <DropdownMenu open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 hover:bg-transparent active:scale-100"
+                  >
+                    <Smile className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="top" align="end" className="w-56">
+                  <DropdownMenuLabel>Quick emojis</DropdownMenuLabel>
+                  <div className="grid grid-cols-6 gap-1 px-1 py-1 text-lg">
+                    {["😀","😁","😂","🤣","😊","😍","😎","🤔","🙌","👍","🔥","💡"].map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        className="h-8 w-8 flex items-center justify-center rounded hover:bg-muted"
+                        onClick={() => handleEmojiSelect(emoji)}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
           
           <Button 
@@ -641,6 +758,39 @@ export function ChatWindow({ conversationId, otherParticipant }: ChatWindowProps
           </Button>
         </div>
         
+        {/* Hidden inputs for media & documents */}
+        <input
+          ref={mediaInputRef}
+          type="file"
+          accept="image/*,video/*"
+          className="hidden"
+          onChange={handleMediaChange}
+        />
+        <input
+          ref={docInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleDocumentChange}
+        />
+
+        {/* Small chips to show selected attachments (demo only) */}
+        {(selectedMediaName || selectedDocumentName) && (
+          <div className="flex flex-wrap gap-2 mt-2 text-xs">
+            {selectedMediaName && (
+              <div className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1">
+                <ImageIcon className="h-3 w-3" />
+                <span className="max-w-[160px] truncate">{selectedMediaName}</span>
+              </div>
+            )}
+            {selectedDocumentName && (
+              <div className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1">
+                <FileText className="h-3 w-3" />
+                <span className="max-w-[160px] truncate">{selectedDocumentName}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Quick Replies */}
         {!newMessage && (
           <div className="flex flex-wrap gap-2 mt-3">

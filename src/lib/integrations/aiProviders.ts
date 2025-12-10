@@ -40,10 +40,10 @@ export const AI_PROVIDERS: Record<AIProvider, AIProviderConfig> = {
   openai: {
     id: 'openai',
     name: 'OpenAI',
-    description: 'GPT-4, GPT-3.5, DALL-E, Whisper',
+    description: 'GPT-4o, GPT-4o Mini, GPT-3.5, DALL·E, Whisper',
     website: 'https://platform.openai.com',
     apiKeyUrl: 'https://platform.openai.com/api-keys',
-    models: ['gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo', 'dall-e-3', 'dall-e-2', 'whisper-1'],
+    models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo', 'dall-e-3', 'dall-e-2', 'whisper-1'],
     supports: { text: true, image: true, code: true, chat: true },
     pricing: {
       perToken: 0.00001,
@@ -217,7 +217,7 @@ export function recommendModels(
     recommendations.push({
       providerId: provider.id,
       model: recommendedModel,
-      reason: getRecommendationReason(provider, promptType, complexity),
+      reason: getRecommendationReason(provider, promptType, complexity, budget),
       confidence: calculateConfidence(provider, promptType, complexity, budget),
       estimatedCost: provider.pricing?.perToken || provider.pricing?.perImage
     })
@@ -230,7 +230,8 @@ export function recommendModels(
 function getRecommendationReason(
   provider: AIProviderConfig,
   promptType: string,
-  complexity: string
+  complexity: string,
+  budget: string
 ): string {
   if (provider.id === 'openrouter') {
     return 'Best for trying multiple models with one API key'

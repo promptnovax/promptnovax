@@ -10,8 +10,8 @@ import {
   runTransaction,
   getDoc,
   serverTimestamp
-} from "firebase/firestore"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
+} from "@/lib/platformStubs/firestore"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 
@@ -27,7 +27,7 @@ export function usePromptActions() {
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - just show toast
       success("Demo Mode", "Like functionality would work in production")
       return
@@ -36,10 +36,10 @@ export function usePromptActions() {
     setLoading(`like-${promptId}`)
     
     try {
-      const promptRef = doc(firebaseDb, 'prompts', promptId)
-      const likeRef = doc(firebaseDb, 'prompts', promptId, 'likes', currentUser.uid)
+      const promptRef = doc(platformDb, 'prompts', promptId)
+      const likeRef = doc(platformDb, 'prompts', promptId, 'likes', currentUser.uid)
       
-      await runTransaction(firebaseDb, async (transaction) => {
+      await runTransaction(platformDb, async (transaction) => {
         const likeDoc = await transaction.get(likeRef)
         const promptDoc = await transaction.get(promptRef)
         
@@ -84,7 +84,7 @@ export function usePromptActions() {
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - just show toast
       success("Demo Mode", "Save functionality would work in production")
       return
@@ -93,10 +93,10 @@ export function usePromptActions() {
     setLoading(`save-${promptId}`)
     
     try {
-      const savedPromptRef = doc(firebaseDb, 'users', currentUser.uid, 'savedPrompts', promptId)
-      const promptRef = doc(firebaseDb, 'prompts', promptId)
+      const savedPromptRef = doc(platformDb, 'users', currentUser.uid, 'savedPrompts', promptId)
+      const promptRef = doc(platformDb, 'prompts', promptId)
       
-      await runTransaction(firebaseDb, async (transaction) => {
+      await runTransaction(platformDb, async (transaction) => {
         const savedDoc = await transaction.get(savedPromptRef)
         const promptDoc = await transaction.get(promptRef)
         
@@ -147,7 +147,7 @@ export function usePromptActions() {
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - just show toast
       success("Demo Mode", "Follow functionality would work in production")
       return
@@ -156,10 +156,10 @@ export function usePromptActions() {
     setLoading(`follow-${targetUserId}`)
     
     try {
-      const currentUserRef = doc(firebaseDb, 'users', currentUser.uid)
-      const targetUserRef = doc(firebaseDb, 'users', targetUserId)
+      const currentUserRef = doc(platformDb, 'users', currentUser.uid)
+      const targetUserRef = doc(platformDb, 'users', targetUserId)
       
-      await runTransaction(firebaseDb, async (transaction) => {
+      await runTransaction(platformDb, async (transaction) => {
         const currentUserDoc = await transaction.get(currentUserRef)
         const targetUserDoc = await transaction.get(targetUserRef)
         

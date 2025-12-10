@@ -177,8 +177,8 @@ export function CommunityPage() {
   const filteredPosts = posts.filter(post => {
     const matchesSearch =
       post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      post.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      post.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+                         post.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         post.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
     const matchesCategory = selectedCategory === "all" || post.category === selectedCategory
     return matchesSearch && matchesCategory
   })
@@ -201,20 +201,20 @@ export function CommunityPage() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(120,123,255,0.12),_transparent_55%)]">
-      <header className="sticky top-20 md:top-[5.25rem] z-30 border-b bg-background/80 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur">
         <div className="container mx-auto flex flex-col gap-4 px-4 py-5 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">PromptNovaX Community</p>
             <h1 className="text-3xl font-semibold leading-tight">The HQ where AI operators ship together</h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Badge variant="secondary" className="text-sm">
+              <Badge variant="secondary" className="text-sm">
               {filteredPosts.length} live posts
-            </Badge>
-            <Button onClick={handleNewPost} className="gap-2">
-              <Plus className="h-4 w-4" />
+              </Badge>
+              <Button onClick={handleNewPost} className="gap-2">
+                <Plus className="h-4 w-4" />
               Share update
-            </Button>
+              </Button>
           </div>
         </div>
       </header>
@@ -233,7 +233,7 @@ export function CommunityPage() {
                 Access the main PromptNovaX community HQ, align on guidelines, enroll into pods and step directly into the live chat
                 experience where every message is signal.
               </p>
-            </div>
+                </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               {communityStats.map(stat => (
@@ -244,25 +244,25 @@ export function CommunityPage() {
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-primary">{stat.growth}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
             <div className="flex flex-wrap gap-3">
               <Button size="lg" className="gap-2" onClick={() => navigateTo("community/hq")}>
                 Enter main community
                 <ArrowRight className="h-4 w-4" />
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
+                  </Button>
+                  <Button 
+                    size="lg"
+                    variant="outline"
                 className="gap-2 border-dashed border-primary/40 text-primary"
                 onClick={() => navigateTo("community/guidelines")}
-              >
+                  >
                 Review membership brief
-              </Button>
-            </div>
+                  </Button>
+                </div>
           </div>
 
           <Card className="border-primary/20 bg-gradient-to-b from-primary/10 to-background">
@@ -360,7 +360,7 @@ export function CommunityPage() {
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">{program.description}</p>
-                </div>
+        </div>
               ))}
             </CardContent>
           </Card>
@@ -383,96 +383,96 @@ export function CommunityPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid gap-3 lg:grid-cols-3">
-                {categories.map(category => {
-                  const Icon = category.icon
-                  const isActive = selectedCategory === category.value
-                  return (
-                    <button
-                      key={category.value}
-                      onClick={() => setSelectedCategory(category.value)}
+                  {categories.map(category => {
+                    const Icon = category.icon
+                    const isActive = selectedCategory === category.value
+                    return (
+                      <button
+                        key={category.value}
+                        onClick={() => setSelectedCategory(category.value)}
                       className={`rounded-2xl border p-3 text-left transition-all ${
                         isActive ? "border-primary bg-primary/5" : "hover:border-primary/30"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
+                        }`}
+                      >
+                          <div className="flex items-center gap-2">
                         <Icon className="h-4 w-4 text-primary" />
                         <p className="text-sm font-semibold">{category.label}</p>
                         <Badge variant="secondary" className="ml-auto text-xs">
-                          {category.count}
-                        </Badge>
-                      </div>
+                            {category.count}
+                          </Badge>
+                        </div>
                       <p className="mt-2 text-xs text-muted-foreground">{category.description}</p>
-                    </button>
-                  )
-                })}
+                      </button>
+                    )
+                  })}
               </div>
               <Separator />
               <div className="space-y-4">
                 {filteredPosts.map(post => (
                   <Card key={post.id} className="border-border/80 bg-muted/30">
                     <CardHeader className="pb-3">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          {categories.find(c => c.value === post.category)?.label}
-                        </Badge>
-                        {post.author.verified && (
+                        <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">
+                                {categories.find(c => c.value === post.category)?.label}
+                              </Badge>
+                              {post.author.verified && (
                           <Badge variant="secondary" className="gap-1 text-xs">
                             <Star className="h-3 w-3" />
-                            Verified
-                          </Badge>
-                        )}
-                      </div>
+                                  Verified
+                                </Badge>
+                              )}
+                            </div>
                       <CardTitle className="text-lg">
                         <Link href={`#community/${post.id}`}>{post.title}</Link>
-                      </CardTitle>
+                            </CardTitle>
                       <CardDescription>{post.description}</CardDescription>
-                    </CardHeader>
+                      </CardHeader>
                     <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                       <div className="flex items-center gap-3">
                         <Avatar className="h-9 w-9">
-                          <AvatarImage src={post.author.avatar} />
+                                <AvatarImage src={post.author.avatar} />
                           <AvatarFallback>{post.author.name[0]}</AvatarFallback>
-                        </Avatar>
-                        <div>
+                              </Avatar>
+                              <div>
                           <p className="text-sm font-semibold">{post.author.name}</p>
                           <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            {post.timeAgo}
-                          </p>
-                        </div>
-                      </div>
+                                  <Clock className="h-3 w-3" />
+                                  {post.timeAgo}
+                                </p>
+                              </div>
+                            </div>
                       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                         <button
                           className={`flex items-center gap-1 rounded-full px-2 py-1 transition-colors ${
                             post.isLiked ? "text-red-500" : "hover:text-primary"
-                          }`}
-                          onClick={() => handleLike(post.id)}
-                        >
+                                }`}
+                                onClick={() => handleLike(post.id)}
+                              >
                           <Heart className={`h-4 w-4 ${post.isLiked ? "fill-current" : ""}`} />
-                          {post.stats.likes}
+                                {post.stats.likes}
                         </button>
-                        <div className="flex items-center gap-1">
-                          <MessageCircle className="h-4 w-4" />
-                          {post.stats.comments}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Eye className="h-4 w-4" />
-                          {post.stats.views}
-                        </div>
+                              <div className="flex items-center gap-1">
+                                <MessageCircle className="h-4 w-4" />
+                                {post.stats.comments}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Eye className="h-4 w-4" />
+                                {post.stats.views}
+                              </div>
                         <button
                           className={`rounded-full px-2 py-1 ${
                             post.isBookmarked ? "bg-primary/10 text-primary" : "hover:text-primary"
-                          }`}
-                          onClick={() => handleBookmark(post.id)}
-                        >
+                              }`}
+                              onClick={() => handleBookmark(post.id)}
+                            >
                           <Star className={`h-4 w-4 ${post.isBookmarked ? "fill-current" : ""}`} />
                         </button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                        </div>
+                      </CardContent>
+                    </Card>
                 ))}
               </div>
-              {filteredPosts.length === 0 && (
+            {filteredPosts.length === 0 && (
                 <div className="rounded-2xl border border-dashed p-10 text-center">
                   <div className="text-4xl mb-3">🔍</div>
                   <p className="text-lg font-semibold">No threads match those filters</p>
@@ -481,12 +481,12 @@ export function CommunityPage() {
                     variant="outline"
                     className="mt-4"
                     onClick={() => {
-                      setSearchQuery("")
-                      setSelectedCategory("all")
+                  setSearchQuery("")
+                  setSelectedCategory("all")
                     }}
                   >
                     Clear filters
-                  </Button>
+                </Button>
                 </div>
               )}
             </CardContent>
@@ -546,9 +546,9 @@ export function CommunityPage() {
                       <span className="ml-auto text-xs text-muted-foreground">{message.timestamp}</span>
                     </div>
                     <p className="mt-2 text-sm text-muted-foreground">{message.message}</p>
-                  </div>
+        </div>
                 ))}
-              </div>
+      </div>
             </CardContent>
           </Card>
         </section>

@@ -24,19 +24,22 @@ import {
 import { BrandLogo } from "@/components/visuals/BrandLogo"
 
 export function SignupPage() {
+  const RESEND_INTERVAL = 30
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
     confirmPassword: ""
   })
-  const [userType, setUserType] = useState<"buyer" | "seller" | "both">("buyer")
+  const [userType, setUserType] = useState<"buyer" | "seller">("buyer")
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [otpSent, setOtpSent] = useState(false)
   const [otpCode, setOtpCode] = useState("")
+  const [resendTimer, setResendTimer] = useState(0)
+  const [resendLoading, setResendLoading] = useState(false)
   const { success, error } = useToast()
   const { signup, loginWithGoogle, currentUser, userRole } = useAuth()
 
@@ -44,10 +47,18 @@ export function SignupPage() {
   useEffect(() => {
     if (currentUser && userRole) {
       // Redirect to dashboard based on user role
-      const redirectPath = userRole.role === "seller" ? "#dashboard/seller" : (userRole.role === "buyer" ? "#dashboard/buyer" : "#dashboard/seller")
+      const redirectPath = userRole.role === "seller" ? "#dashboard/seller" : "#dashboard/buyer"
       window.location.hash = redirectPath
     }
   }, [currentUser, userRole])
+
+  useEffect(() => {
+    if (resendTimer <= 0) return
+    const timer = setInterval(() => {
+      setResendTimer((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [resendTimer])
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -85,13 +96,39 @@ export function SignupPage() {
     setIsLoading(true)
     
     try {
-      await postJson<{ ok: boolean }>("/otp/send", { email: formData.email })
+      const response = await postJson<{ ok: boolean; devCode?: string }>("/otp/send", { email: formData.email })
       setOtpSent(true)
+      setResendTimer(RESEND_INTERVAL)
       success("Verification code sent", "Check your email for the 6-digit code")
+      if (response.devCode) {
+        success("Dev mode code", `Use ${response.devCode} (visible because NODE_ENV !== production)`)
+      }
     } catch (err: any) {
       error("Signup failed", err.message || "Please try again")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleResendCode = async () => {
+    if (!formData.email) {
+      error("Email missing", "Enter your email first")
+      return
+    }
+    if (resendTimer > 0 || resendLoading) return
+
+    setResendLoading(true)
+    try {
+      const response = await postJson<{ ok: boolean; devCode?: string }>("/otp/send", { email: formData.email })
+      setResendTimer(RESEND_INTERVAL)
+      success("Code re-sent", "Check your inbox for the latest code")
+      if (response.devCode) {
+        success("Dev mode code", `Use ${response.devCode}`)
+      }
+    } catch (err: any) {
+      error("Resend failed", err.message || "Please try again")
+    } finally {
+      setResendLoading(false)
     }
   }
 
@@ -108,7 +145,7 @@ export function SignupPage() {
       
       // Manual redirect after successful signup
       setTimeout(() => {
-        const redirectPath = userType === "seller" ? "#dashboard/seller" : (userType === "buyer" ? "#dashboard/buyer" : "#dashboard/seller")
+        const redirectPath = userType === "seller" ? "#dashboard/seller" : "#dashboard/buyer"
         window.location.hash = redirectPath
         window.location.reload() // Force reload to ensure clean state
       }, 1500)
@@ -128,7 +165,7 @@ export function SignupPage() {
         
         // Manual redirect after successful Google signup
         setTimeout(() => {
-          const redirectPath = userType === "seller" ? "#dashboard/seller" : (userType === "buyer" ? "#dashboard/buyer" : "#dashboard/seller")
+          const redirectPath = userType === "seller" ? "#dashboard/seller" : "#dashboard/buyer"
           window.location.hash = redirectPath
           window.location.reload() // Force reload to ensure clean state
         }, 1500)
@@ -213,19 +250,6 @@ export function SignupPage() {
                 >
                   <User className="h-4 w-4" />
                   Seller
-                </motion.button>
-                <motion.button
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-                    userType === "both"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  onClick={() => setUserType("both")}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <User className="h-4 w-4" />
-                  Both
                 </motion.button>
               </div>
             </motion.div>
@@ -425,7 +449,16 @@ export function SignupPage() {
                   className="h-12 text-center tracking-widest text-lg"
                 />
                 <div className="flex gap-2">
-                  <Button type="button" variant="outline" className="flex-1" onClick={() => setOtpSent(false)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setOtpSent(false)
+                      setResendTimer(0)
+                      setOtpCode("")
+                    }}
+                  >
                     Edit email
                   </Button>
                   <Button type="button" className="flex-1" onClick={handleVerifyAndCreate} disabled={isLoading}>
@@ -441,6 +474,22 @@ export function SignupPage() {
                     </>
                   )}
                 </Button>
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    {resendTimer > 0
+                      ? `You can resend a code in ${resendTimer}s`
+                      : "Didn't receive the email?"}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto px-0 text-sm"
+                    onClick={handleResendCode}
+                    disabled={resendTimer > 0 || resendLoading}
+                  >
+                    {resendLoading ? "Sending..." : "Resend code"}
+                  </Button>
                 </div>
               </div>
               )}

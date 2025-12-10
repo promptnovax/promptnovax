@@ -31,40 +31,35 @@ If any environment variables are required, copy `.env.example` to `.env` and fil
 ### 4. Static Content
 All static files are in the `public/` directory. Paths are relative and should work out of the box.
 
-## Firebase Backend Setup
+## Supabase Backend Setup
 
-To enable Firebase authentication and database functionality:
+To enable Supabase-powered authentication and database functionality:
 
-### 1. Create a Firebase Project
-1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Click "Create a project" or "Add project"
-3. Follow the setup wizard to create your project
+### 1. Create a Supabase Project
+1. Go to [Supabase](https://supabase.com)
+2. Create a new project (choose the free tier for local testing)
+3. Wait for the project to provision
 
-### 2. Enable Required Services
-1. **Firestore Database**: Go to Firestore Database → Create database → Start in test mode
-2. **Authentication**: Go to Authentication → Get started → Enable Email/Password and Google sign-in
-3. **Storage**: Go to Storage → Get started → Start in test mode
+### 2. Enable Authentication Providers
+1. In the Supabase dashboard, open **Authentication → Providers**
+2. Enable Email/Password (default) and optionally Google OAuth
+3. Configure redirect URLs if you plan to support OAuth flows
 
-### 3. Get Firebase Configuration
-1. Go to Project Settings (gear icon) → General tab
-2. Scroll down to "Your apps" section
-3. Click "Add app" → Web app (</>) → Register app
-4. Copy the Firebase configuration object
+### 3. Obtain API Keys
+1. Go to **Project Settings → API**
+2. Copy the Project URL and `anon` public key
+3. Copy the `service_role` key for secure server-side usage (do not expose this to the client)
 
-### 4. Create Service Account
-1. Go to Project Settings → Service accounts tab
-2. Click "Generate new private key"
-3. Download the JSON file (keep it secure!)
+### 4. Environment Variables
+1. Copy `.env.example` to `.env`
+2. Fill in the Supabase values:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY` (optional, for backend verification)
 
-### 5. Environment Variables
-1. Copy `.env.local.example` to `.env.local`
-2. Fill in your Firebase configuration values:
-   - `NEXT_PUBLIC_FIREBASE_*` values from step 3
-   - `FIREBASE_SERVICE_ACCOUNT_JSON` with the entire JSON content from step 4
-
-### 6. Security Rules (Optional)
-Configure Firestore and Storage security rules in the Firebase Console as needed for your application.
+### 5. Optional Database Tables
+The UI currently runs in demo mode without a live database. When you are ready to wire Supabase tables, create the relevant tables (e.g., `prompts`, `users`, `notifications`) and update the data access layer accordingly.
 
 ---
-**Firebase setup is optional for local development. The app will work without it, but authentication and database features will be disabled.**
+**Supabase setup is optional for local development. The app will work without it, but authentication and database features will remain in demo mode until configured.**
 

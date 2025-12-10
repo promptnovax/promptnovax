@@ -13,8 +13,8 @@ import {
   getDocs,
   onSnapshot,
   doc
-} from "firebase/firestore"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
+} from "@/lib/platformStubs/firestore"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
 import { 
   Bookmark,
   Loader2,
@@ -57,7 +57,7 @@ export function SavedPromptsPage() {
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - show mock data
       loadMockSavedPrompts()
       return
@@ -68,7 +68,7 @@ export function SavedPromptsPage() {
       setErrorMessage(null)
 
       // Get saved prompt IDs from user's savedPrompts subcollection
-      const savedPromptsRef = collection(firebaseDb, 'users', currentUser.uid, 'savedPrompts')
+      const savedPromptsRef = collection(platformDb, 'users', currentUser.uid, 'savedPrompts')
       const savedPromptsQuery = query(savedPromptsRef, orderBy('savedAt', 'desc'))
       const savedPromptsSnapshot = await getDocs(savedPromptsQuery)
       
@@ -88,8 +88,8 @@ export function SavedPromptsPage() {
       
       for (const savedPrompt of savedPromptIds) {
         try {
-          const promptRef = doc(firebaseDb, 'prompts', savedPrompt.id)
-          const promptDoc = await getDocs(query(collection(firebaseDb, 'prompts'), where('__name__', '==', savedPrompt.id)))
+          const promptRef = doc(platformDb, 'prompts', savedPrompt.id)
+          const promptDoc = await getDocs(query(collection(platformDb, 'prompts'), where('__name__', '==', savedPrompt.id)))
           
           if (!promptDoc.empty) {
             const promptData = promptDoc.docs[0].data()
@@ -100,7 +100,7 @@ export function SavedPromptsPage() {
             if (promptData.uid) {
               try {
                 const userQuery = query(
-                  collection(firebaseDb, 'users'),
+                  collection(platformDb, 'users'),
                   where('__name__', '==', promptData.uid)
                 )
                 const userSnapshot = await getDocs(userQuery)

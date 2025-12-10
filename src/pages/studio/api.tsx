@@ -81,7 +81,7 @@ const WORKFLOW_BLUEPRINT: WorkflowStage[] = [
   {
     id: "generation",
     label: "Primary Generation",
-    description: "Core completion or summarization pass",
+    description: "Core completion or summarization pass (Required)",
     type: "text",
     icon: Sparkles,
     active: true,
@@ -90,7 +90,7 @@ const WORKFLOW_BLUEPRINT: WorkflowStage[] = [
   {
     id: "image",
     label: "Visual Companion",
-    description: "Optional hero image or storyboard frames",
+    description: "Optional hero image or storyboard frames (OpenAI/Stability only)",
     type: "image",
     icon: ImageIcon,
     active: false,
@@ -99,7 +99,7 @@ const WORKFLOW_BLUEPRINT: WorkflowStage[] = [
   {
     id: "chat-loop",
     label: "Chat Loop",
-    description: "Memory-aware chat responses for follow ups",
+    description: "Memory-aware chat responses for follow ups (OpenAI only)",
     type: "chat",
     icon: MessageSquare,
     active: true,
@@ -108,7 +108,7 @@ const WORKFLOW_BLUEPRINT: WorkflowStage[] = [
   {
     id: "video",
     label: "Motion Layer",
-    description: "Short-form video beats or shot list",
+    description: "Short-form video beats or shot list (Replicate only)",
     type: "video",
     icon: Video,
     active: false,
@@ -236,6 +236,7 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
   // Execution State
   const [executing, setExecuting] = useState(false)
   const [response, setResponse] = useState<ExecutePromptResponse | null>(null)
+  const [saveToHistory, setSaveToHistory] = useState(true) // Auto save by default
   
   // Load saved integrations
   useEffect(() => {
@@ -245,6 +246,34 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
       setSelectedModel(models[0])
     }
   }, [selectedProvider])
+  
+  // Get current API key (must be defined before useEffects that use it)
+  const currentApiKey = useMemo(() => {
+    const integrations = loadIntegrations()
+    return integrations[selectedProvider]?.apiKey || ""
+  }, [selectedProvider])
+
+  // Keyboard shortcut: Shift + Enter to run pipeline
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.shiftKey && e.key === 'Enter') {
+        // Don't trigger if user is typing in a textarea/input
+        const target = e.target as HTMLElement
+        if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') {
+          return
+        }
+        
+        e.preventDefault()
+        if (!executing && currentApiKey && selectedModel && userPrompt.trim()) {
+          handleExecute()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [executing, currentApiKey, selectedModel, userPrompt])
 
   useEffect(() => {
     const matchingStep = workflowSteps.find(step => step.type === activeTab && step.active)
@@ -280,12 +309,6 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
     return () => window.removeEventListener("scroll", handleScroll)
   }, [activeSectionNav, restrictToSection])
   
-  // Get current API key
-  const currentApiKey = useMemo(() => {
-    const integrations = loadIntegrations()
-    return integrations[selectedProvider]?.apiKey || ""
-  }, [selectedProvider])
-  
   // Available models for selected provider
   const availableModels = useMemo(() => {
     return getModels(selectedProvider)
@@ -315,11 +338,13 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
   const generatedCode = useMemo(() => {
     if (!selectedModel || !userPrompt) return ""
     
+    const includeSystemPrompt = workflowSteps.some(stage => stage.active && stage.id === "briefing")
+
     const config = {
       provider: selectedProvider,
       model: selectedModel,
       apiKey: currentApiKey || "YOUR_API_KEY",
-      systemPrompt: systemPrompt || undefined,
+      systemPrompt: includeSystemPrompt ? systemPrompt || undefined : undefined,
       userPrompt,
       temperature,
       maxTokens,
@@ -338,7 +363,7 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
   }, [
     selectedProvider, selectedModel, currentApiKey, systemPrompt, userPrompt,
     temperature, maxTokens, topP, frequencyPenalty, presencePenalty, stopSequences,
-    imageSize, imageQuality, imageStyle, videoDuration, aspectRatio, codeFormat
+    imageSize, imageQuality, imageStyle, videoDuration, aspectRatio, codeFormat, workflowSteps
   ])
 
   const blueprintSchema = useMemo(() => {
@@ -424,11 +449,30 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
   }
 
   const handleBlueprintToggle = (id: string) => {
+    // Prevent disabling Primary Generation (required stage)
+    if (id === "generation") {
+      toast({
+        title: "Cannot Disable",
+        description: "Primary Generation stage must remain enabled to execute prompts.",
+        variant: "destructive"
+      })
+      return
+    }
+
     setWorkflowSteps(prev =>
       prev.map(step =>
         step.id === id ? { ...step, active: !step.active } : step
       )
     )
+
+    const step = workflowSteps.find(s => s.id === id)
+    if (step) {
+      toast({
+        title: step.active ? "Stage Disabled" : "Stage Enabled",
+        description: `${step.label} has been ${step.active ? "disabled" : "enabled"}. ${step.active ? "This stage will be skipped during execution." : "This stage will run when you execute."}`,
+        duration: 3000
+      })
+    }
   }
 
   const handleSelectWorkflowStep = (id: string) => {
@@ -485,6 +529,26 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
       return
     }
     
+    const activeStages = workflowSteps.filter(step => step.active)
+    
+    if (activeStages.length === 0) {
+      toast({
+        title: "Workflow Required",
+        description: "Toggle on at least one stage in the Workflow Blueprint.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!activeStages.some(stage => stage.id === "generation")) {
+      toast({
+        title: "Enable Primary Generation",
+        description: "The Primary Generation stage must remain enabled to execute.",
+        variant: "destructive"
+      })
+      return
+    }
+    
     if (!selectedModel) {
       toast({
         title: "Model Required",
@@ -502,16 +566,43 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
       })
       return
     }
+
+    const wantsImageStage = activeStages.some(stage => stage.id === "image")
+    if (wantsImageStage && !supportsImage) {
+      toast({
+        title: "Image Stage Unsupported",
+        description: "Switch to a provider that supports image generation (OpenAI or Stability).",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const wantsVideoStage = activeStages.some(stage => stage.id === "video")
+    if (wantsVideoStage && !supportsVideo) {
+      toast({
+        title: "Video Stage Unsupported",
+        description: "Select the Replicate provider to use the Motion Layer stage.",
+        variant: "destructive"
+      })
+      return
+    }
     
     setExecuting(true)
     setResponse(null)
     
     try {
+      const stagePayload = activeStages.map(stage => ({
+        id: stage.id,
+        label: stage.label,
+        type: stage.type,
+        runtime: stage.runtime
+      }))
+
       const result = await executePrompt({
         provider: selectedProvider,
         model: selectedModel,
         apiKey: currentApiKey,
-        systemPrompt: systemPrompt || undefined,
+        systemPrompt: activeStages.some(stage => stage.id === "briefing") ? systemPrompt || undefined : undefined,
         userPrompt,
         temperature,
         maxTokens,
@@ -523,19 +614,22 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
         quality: imageQuality,
         style: imageStyle,
         duration: videoDuration,
-        aspectRatio
+        aspectRatio,
+        workflowStages: stagePayload
       })
       
       setResponse(result)
       
-      // Save to history
+      // Save to history if enabled
       if (result.success) {
-        addPromptToHistory({
-          provider: selectedProvider,
-          model: selectedModel,
-          prompt: userPrompt,
-          response: typeof result.data === 'string' ? result.data : JSON.stringify(result.data)
-        })
+        if (saveToHistory) {
+          addPromptToHistory({
+            provider: selectedProvider,
+            model: selectedModel,
+            prompt: userPrompt,
+            response: typeof result.data === 'string' ? result.data : JSON.stringify(result.data)
+          })
+        }
         
         toast({
           title: "Success!",
@@ -562,6 +656,23 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
       setExecuting(false)
     }
   }
+
+  // Auto Execute: Re-run when parameters change (debounced)
+  useEffect(() => {
+    if (!autoExecuteEnabled) return
+    if (!currentApiKey || !selectedModel || !userPrompt.trim()) return
+    if (executing) return // Don't trigger if already executing
+
+    // Debounce: Wait 1.5 seconds after last change before executing
+    const timeoutId = setTimeout(() => {
+      if (!executing) {
+        handleExecute()
+      }
+    }, 1500)
+
+    return () => clearTimeout(timeoutId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoExecuteEnabled, userPrompt, systemPrompt, temperature, maxTokens, topP, selectedProvider, selectedModel, currentApiKey, executing])
 
   // Handle history load
   const handleLoadHistory = (historyItem: any) => {
@@ -607,6 +718,11 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
                       </Badge>
                     )
                   })}
+                  {workflowSteps.filter(step => !step.active && step.id !== "generation").length > 0 && (
+                    <Badge variant="outline" className="bg-white/5 border-white/10 text-white/60 gap-2">
+                      +{workflowSteps.filter(step => !step.active && step.id !== "generation").length} more available
+                    </Badge>
+                  )}
                 </div>
               </div>
               <div className="w-full max-w-sm rounded-2xl border border-white/20 bg-white/10 p-5 backdrop-blur">
@@ -779,8 +895,15 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
           <div className="grid gap-6 lg:grid-cols-2">
             <Card className="h-fit border-dashed border-primary/20 lg:col-span-2">
               <CardHeader>
-                <CardTitle>Workflow Blueprint</CardTitle>
-                <CardDescription>Toggle the stages your generator should run.</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Workflow Blueprint</CardTitle>
+                    <CardDescription>Toggle the stages your generator should run.</CardDescription>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    {workflowSteps.filter(s => s.active).length} of {workflowSteps.length} active
+                  </Badge>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {workflowSteps.map(step => {
@@ -806,14 +929,30 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
                         </button>
                         <div className="flex flex-col items-end gap-1">
                           <span className="text-xs text-muted-foreground">{step.runtime}</span>
-                          <Switch checked={step.active} onCheckedChange={() => handleBlueprintToggle(step.id)} />
+                          <Switch 
+                            checked={step.active} 
+                            onCheckedChange={() => handleBlueprintToggle(step.id)}
+                            disabled={step.id === "generation"}
+                            title={step.id === "generation" ? "Primary Generation cannot be disabled" : undefined}
+                          />
+                          {step.id === "generation" && (
+                            <Badge variant="outline" className="text-xs mt-1">Required</Badge>
+                          )}
                         </div>
                       </div>
                     </div>
                   )
                 })}
                 <div className="rounded-2xl border border-dashed border-muted p-4 text-sm text-muted-foreground">
-                  Need another stage (RAG, tool-call, webhook)? Add it here and we will auto-wire the schema once backend endpoints exist.
+                  <p className="font-semibold text-foreground mb-2">💡 Stage Guide:</p>
+                  <ul className="space-y-1 text-xs list-disc list-inside">
+                    <li><strong>Briefing:</strong> Applies system prompts and guardrails before generation</li>
+                    <li><strong>Primary Generation:</strong> Required - Executes the main AI model call</li>
+                    <li><strong>Visual Companion:</strong> Generates images (OpenAI DALL·E or Stability SDXL)</li>
+                    <li><strong>Chat Loop:</strong> Creates follow-up conversation turns (OpenAI only)</li>
+                    <li><strong>Motion Layer:</strong> Generates video content (Replicate provider)</li>
+                  </ul>
+                  <p className="mt-3 text-xs">Need another stage (RAG, tool-call, webhook)? Add it here and we will auto-wire the schema once backend endpoints exist.</p>
                 </div>
               </CardContent>
             </Card>
@@ -1235,6 +1374,114 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
                         )}
                       </div>
                     )}
+                    {response.stageResults?.length ? (
+                      <div className="space-y-3 border-t pt-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Layers className="h-4 w-4 text-muted-foreground" />
+                            <p className="text-sm font-semibold">Workflow Execution Results</p>
+                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            {response.stageResults.filter(s => s.status === 'completed').length} completed
+                            {response.stageResults.filter(s => s.status === 'skipped').length > 0 && 
+                              ` • ${response.stageResults.filter(s => s.status === 'skipped').length} skipped`}
+                            {response.stageResults.filter(s => s.status === 'failed').length > 0 && 
+                              ` • ${response.stageResults.filter(s => s.status === 'failed').length} failed`}
+                          </Badge>
+                        </div>
+                        <div className="space-y-2">
+                          {response.stageResults.map((stage) => {
+                            const badgeVariant =
+                              stage.status === 'completed'
+                                ? 'default'
+                                : stage.status === 'skipped'
+                                  ? 'outline'
+                                  : 'destructive'
+                            const stageIcon = workflowSteps.find(s => s.id === stage.id)?.icon || Sparkles
+                            const Icon = stageIcon
+                            return (
+                              <div
+                                key={stage.id}
+                                className={`rounded-xl border px-3 py-2.5 text-sm flex flex-col gap-2 transition-colors ${
+                                  stage.status === 'completed' 
+                                    ? 'border-green-500/20 bg-green-500/5' 
+                                    : stage.status === 'failed'
+                                      ? 'border-red-500/20 bg-red-500/5'
+                                      : 'border-muted'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2">
+                                    <Icon className={`h-4 w-4 ${
+                                      stage.status === 'completed' ? 'text-green-500' : 
+                                      stage.status === 'failed' ? 'text-red-500' : 
+                                      'text-muted-foreground'
+                                    }`} />
+                                    <p className="font-semibold capitalize">{stage.id.replace('-', ' ')}</p>
+                                  </div>
+                                  <Badge variant={badgeVariant} className="text-xs capitalize">
+                                    {stage.status}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground">{stage.summary}</p>
+                                {stage.details && (
+                                  <p className="text-xs text-muted-foreground italic">{stage.details}</p>
+                                )}
+                                {typeof stage.payload?.text === 'string' && (
+                                  <div className="mt-1">
+                                    <p className="text-xs font-medium mb-1 text-muted-foreground">Output:</p>
+                                    <p className="text-xs bg-muted/40 rounded-lg p-2 whitespace-pre-wrap border">
+                                      {stage.payload.text}
+                                    </p>
+                                  </div>
+                                )}
+                                {stage.payload?.systemPrompt && (
+                                  <div className="mt-1">
+                                    <p className="text-xs font-medium mb-1 text-muted-foreground">System Prompt Applied:</p>
+                                    <p className="text-xs bg-muted/40 rounded-lg p-2 whitespace-pre-wrap border max-h-32 overflow-y-auto">
+                                      {stage.payload.systemPrompt}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                    {response.assets?.images?.length ? (
+                      <div className="space-y-2 border-t pt-4">
+                        <p className="text-sm font-semibold">Companion Visuals</p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {response.assets.images.map((src, idx) => (
+                            <img
+                              key={`${src}-${idx}`}
+                              src={src}
+                              alt={`Workflow asset ${idx + 1}`}
+                              className="rounded-lg border object-cover w-full"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {response.assets?.videos?.length ? (
+                      <div className="space-y-2 border-t pt-4">
+                        <p className="text-sm font-semibold">Motion Layer Assets</p>
+                        <div className="space-y-2 text-xs">
+                          {response.assets.videos.map((video, idx) => (
+                            <a
+                              key={`${video}-${idx}`}
+                              href={video}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary underline"
+                            >
+                              View clip #{idx + 1}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
@@ -1649,10 +1896,15 @@ export function ApiStudioPage({ initialSection = "overview", restrictToSection =
                       <p className="font-medium">Save to History</p>
                       <p className="text-xs text-muted-foreground">Logged after successful executions</p>
                     </div>
-                    <Badge variant="outline" className="text-xs gap-1">
+                    <Button
+                      variant={saveToHistory ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setSaveToHistory(!saveToHistory)}
+                      className="gap-1 h-7"
+                    >
                       <Clock3 className="h-3 w-3" />
-                      Auto
-                    </Badge>
+                      {saveToHistory ? "Auto" : "Off"}
+                    </Button>
                   </div>
                   <Separator />
                   <Button

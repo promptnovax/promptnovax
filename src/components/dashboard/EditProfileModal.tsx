@@ -8,9 +8,9 @@ import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/hooks/use-toast"
-import { firebaseDb, firebaseStorage, isFirebaseConfigured } from "@/lib/firebaseClient"
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore"
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
+import { platformDb, platformStorage, isSupabaseConfigured } from "@/lib/platformClient"
+import { doc, updateDoc, serverTimestamp } from "@/lib/platformStubs/firestore"
+import { ref, uploadBytes, getDownloadURL } from "@/lib/platformStubs/storage"
 import { 
   X, 
   Upload, 
@@ -92,7 +92,7 @@ export function EditProfileModal({ user, onClose, onSave }: EditProfileModalProp
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Mock functionality for demo mode
       handleMockSave()
       return
@@ -104,14 +104,14 @@ export function EditProfileModal({ user, onClose, onSave }: EditProfileModalProp
       let photoURL = user.photoURL
 
       // Upload new image if provided
-      if (formData.photoFile && firebaseStorage) {
-        const imageRef = ref(firebaseStorage, `avatars/${currentUser.uid}/${Date.now()}_${formData.photoFile.name}`)
+      if (formData.photoFile && platformStorage) {
+        const imageRef = ref(platformStorage, `avatars/${currentUser.uid}/${Date.now()}_${formData.photoFile.name}`)
         const snapshot = await uploadBytes(imageRef, formData.photoFile)
         photoURL = await getDownloadURL(snapshot.ref)
       }
 
       // Update user document
-      const userRef = doc(firebaseDb, 'users', currentUser.uid)
+      const userRef = doc(platformDb, 'users', currentUser.uid)
       await updateDoc(userRef, {
         displayName: formData.displayName.trim(),
         bio: formData.bio.trim() || null,

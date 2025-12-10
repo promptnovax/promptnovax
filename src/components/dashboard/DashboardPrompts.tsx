@@ -15,8 +15,8 @@ import {
   onSnapshot,
   deleteDoc,
   doc
-} from "firebase/firestore"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
+} from "@/lib/platformStubs/firestore"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
 import { 
   FileText,
   Search,
@@ -65,7 +65,7 @@ export function DashboardPrompts() {
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - show mock data
       loadMockPrompts()
       return
@@ -74,7 +74,7 @@ export function DashboardPrompts() {
     try {
       setLoading(true)
 
-      const promptsRef = collection(firebaseDb, 'prompts')
+      const promptsRef = collection(platformDb, 'prompts')
       const promptsQuery = query(
         promptsRef,
         where('uid', '==', currentUser.uid),
@@ -185,7 +185,7 @@ export function DashboardPrompts() {
 
   // Delete prompt
   const handleDeletePrompt = async (promptId: string) => {
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Demo mode - just remove from local state
       setPrompts(prev => prev.filter(p => p.id !== promptId))
       success("Deleted", "Prompt deleted successfully")
@@ -194,7 +194,7 @@ export function DashboardPrompts() {
 
     setDeletingId(promptId)
     try {
-      await deleteDoc(doc(firebaseDb, 'prompts', promptId))
+      await deleteDoc(doc(platformDb, 'prompts', promptId))
       success("Deleted", "Prompt deleted successfully")
     } catch (err: any) {
       console.error('Error deleting prompt:', err)

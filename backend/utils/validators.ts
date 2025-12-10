@@ -2,6 +2,9 @@
  * Request validators
  */
 
+const SUPPORTED_PROVIDERS = ['openai', 'anthropic', 'google', 'openrouter', 'stability', 'replicate']
+const ALLOWED_WORKFLOW_STAGE_IDS = ['briefing', 'generation', 'image', 'chat-loop', 'video']
+
 export interface ValidationResult {
   valid: boolean
   errors: string[]
@@ -12,7 +15,7 @@ export function validateExecuteRequest(body: any): ValidationResult {
 
   if (!body.provider) {
     errors.push('Provider is required')
-  } else if (!['openai', 'anthropic', 'google', 'openrouter', 'stability', 'replicate'].includes(body.provider)) {
+  } else if (!SUPPORTED_PROVIDERS.includes(body.provider)) {
     errors.push('Invalid provider')
   }
 
@@ -51,6 +54,29 @@ export function validateExecuteRequest(body: any): ValidationResult {
   if (body.topP !== undefined) {
     if (typeof body.topP !== 'number' || body.topP < 0 || body.topP > 1) {
       errors.push('Top P must be between 0 and 1')
+    }
+  }
+
+  if (body.workflowStages !== undefined) {
+    if (!Array.isArray(body.workflowStages)) {
+      errors.push('workflowStages must be an array')
+    } else if (body.workflowStages.length > 10) {
+      errors.push('workflowStages cannot exceed 10 entries')
+    } else {
+      for (const stage of body.workflowStages) {
+        if (!stage || typeof stage !== 'object') {
+          errors.push('Invalid workflow stage payload')
+          break
+        }
+        if (!stage.id || typeof stage.id !== 'string') {
+          errors.push('workflowStages entries require an id')
+          break
+        }
+        if (!ALLOWED_WORKFLOW_STAGE_IDS.includes(stage.id)) {
+          errors.push(`Workflow stage ${stage.id} is not supported`)
+          break
+        }
+      }
     }
   }
 

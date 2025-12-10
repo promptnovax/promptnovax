@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/hooks/use-toast"
-import { firebaseDb, isFirebaseConfigured } from "@/lib/firebaseClient"
+import { platformDb, isSupabaseConfigured } from "@/lib/platformClient"
 import { 
   collection, 
   addDoc, 
@@ -16,7 +16,7 @@ import {
   onSnapshot, 
   serverTimestamp,
   limit
-} from "firebase/firestore"
+} from "@/lib/platformStubs/firestore"
 import { MessageCircle, Send, Calendar, User } from "lucide-react"
 
 interface Comment {
@@ -41,7 +41,7 @@ export function CommentSection({ promptId }: CommentSectionProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
-    if (isFirebaseConfigured && firebaseDb) {
+    if (isSupabaseConfigured && platformDb) {
       loadComments()
     } else {
       // Load mock comments for demo mode
@@ -50,9 +50,9 @@ export function CommentSection({ promptId }: CommentSectionProps) {
   }, [promptId])
 
   const loadComments = () => {
-    if (!isFirebaseConfigured || !firebaseDb) return
+    if (!isSupabaseConfigured || !platformDb) return
 
-    const commentsRef = collection(firebaseDb, 'prompts', promptId, 'comments')
+    const commentsRef = collection(platformDb, 'prompts', promptId, 'comments')
     const q = query(commentsRef, orderBy('createdAt', 'desc'), limit(50))
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -107,7 +107,7 @@ export function CommentSection({ promptId }: CommentSectionProps) {
       return
     }
 
-    if (!isFirebaseConfigured || !firebaseDb) {
+    if (!isSupabaseConfigured || !platformDb) {
       // Mock functionality for demo mode
       handleMockSubmitComment()
       return
@@ -116,7 +116,7 @@ export function CommentSection({ promptId }: CommentSectionProps) {
     setIsSubmitting(true)
 
     try {
-      const commentsRef = collection(firebaseDb, 'prompts', promptId, 'comments')
+      const commentsRef = collection(platformDb, 'prompts', promptId, 'comments')
       await addDoc(commentsRef, {
         userId: currentUser.uid,
         username: currentUser.displayName || currentUser.email?.split('@')[0] || 'Anonymous',

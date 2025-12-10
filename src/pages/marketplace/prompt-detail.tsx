@@ -7,6 +7,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
 import { ContactButtons } from "@/components/contact/ContactButtons"
+import { TemplateAIChat } from "@/components/templates/TemplateAIChat"
+import { ToolSuggestions } from "@/components/templates/ToolSuggestions"
+import { PromptPackOrganizer, PromptPackItem } from "@/components/templates/PromptPackOrganizer"
 import { 
   ArrowLeft,
   Star,
@@ -26,7 +29,8 @@ import {
   TrendingUp,
   Award,
   Shield,
-  X
+  X,
+  MessageSquare
 } from "lucide-react"
 
 interface PromptDetailProps {
@@ -38,6 +42,8 @@ export function PromptDetailPage({ promptId }: PromptDetailProps) {
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [showFullDescription, setShowFullDescription] = useState(false)
   const [showReviews, setShowReviews] = useState(false)
+  const [isChatOpen, setIsChatOpen] = useState(true)
+  const [isChatMinimized, setIsChatMinimized] = useState(false)
   const { success } = useToast()
 
   // Mock prompt data based on ID
@@ -604,14 +610,14 @@ const formatPrice = (price: number) => {
         </div>
       </motion.div>
 
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Main Content */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="lg:col-span-2 space-y-8"
+            className={`space-y-8 ${isChatOpen && !isChatMinimized ? 'lg:col-span-8' : 'lg:col-span-9'}`}
           >
             {/* Prompt Header */}
             <Card>
@@ -775,6 +781,29 @@ const formatPrice = (price: number) => {
               </CardContent>
             </Card>
 
+            {/* Prompt Pack Organizer - Show if template has multiple prompts */}
+            {(prompt as any).promptPack && (prompt as any).promptPack.length > 0 && (
+              <PromptPackOrganizer
+                items={(prompt as any).promptPack.map((item: any, index: number) => ({
+                  id: item.id || `pack-${index}`,
+                  title: item.title || `Prompt ${index + 1}`,
+                  content: item.content || item,
+                  order: index
+                }))}
+                onItemsChange={(items) => {
+                  // Handle prompt pack changes if needed
+                }}
+                readOnly={true}
+              />
+            )}
+
+            {/* Tool Suggestions */}
+            <ToolSuggestions
+              templateCategory={prompt.category}
+              templateTitle={prompt.title}
+              promptContent={prompt.exampleUsage}
+            />
+
             {/* Related Prompts */}
             <Card>
               <CardHeader>
@@ -817,15 +846,55 @@ const formatPrice = (price: number) => {
             </Card>
           </motion.div>
 
+          {/* AI Chat Sidebar */}
+          {isChatOpen && !isChatMinimized && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              className="lg:col-span-4"
+            >
+              <div className="sticky top-24">
+                <TemplateAIChat
+                  templateTitle={prompt.title}
+                  templateDescription={prompt.description}
+                  templateCategory={prompt.category}
+                  promptContent={prompt.exampleUsage}
+                  isMinimized={isChatMinimized}
+                  onToggleMinimize={() => setIsChatMinimized(!isChatMinimized)}
+                />
+              </div>
+            </motion.div>
+          )}
+
           {/* Sidebar */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="space-y-6"
+            className={`space-y-6 ${isChatOpen && !isChatMinimized ? 'lg:col-span-12 lg:mt-8' : 'lg:col-span-3'}`}
           >
+            {/* Toggle Chat Button */}
+            {(!isChatOpen || isChatMinimized) && (
+              <Card>
+                <CardContent className="p-4">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      setIsChatOpen(true)
+                      setIsChatMinimized(false)
+                    }}
+                  >
+                    <MessageSquare className="h-4 w-4 mr-2" />
+                    {isChatMinimized ? "Restore AI Guide" : "Open AI Guide"}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Purchase Card */}
-            <Card className="sticky top-24">
+            <Card className={isChatOpen && !isChatMinimized ? "" : "sticky top-24"}>
               <CardContent className="p-6">
                 <div className="text-center mb-6">
                   <div className="flex items-center justify-center gap-2 mb-2">
