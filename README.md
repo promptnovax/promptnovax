@@ -63,3 +63,56 @@ The UI currently runs in demo mode without a live database. When you are ready t
 ---
 **Supabase setup is optional for local development. The app will work without it, but authentication and database features will remain in demo mode until configured.**
 
+## Vercel Deployment
+
+This project is configured for easy deployment on Vercel.
+
+### 1. Connect Repository to Vercel
+
+1. Go to [Vercel Dashboard](https://vercel.com/dashboard)
+2. Click "Add New Project"
+3. Import your GitHub repository: `promptnovax/promptnovax`
+4. Vercel will automatically detect the Vite framework
+
+### 2. Configure Build Settings
+
+Vercel will auto-detect these settings from `vercel.json`:
+- **Framework Preset**: Vite
+- **Build Command**: `npm run build`
+- **Output Directory**: `dist`
+- **Install Command**: `npm install`
+
+### 3. Set Environment Variables
+
+In Vercel project settings, add these environment variables:
+
+**Required:**
+```
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+**Optional (for backend features):**
+```
+VITE_API_BASE=https://your-backend-url.com
+VITE_BACKEND_URL=https://your-backend-url.com
+VITE_ENABLE_LOCAL_PROMPT_FALLBACK=true
+```
+
+### 4. Deploy
+
+1. Click "Deploy" - Vercel will automatically build and deploy your app
+2. Your app will be live at `https://your-project.vercel.app`
+3. Future pushes to the `main` branch will automatically trigger new deployments
+
+### 5. Backend Deployment (Optional)
+
+If you need the Express backend running separately:
+
+1. Deploy the backend to a service like Railway, Render, or Vercel Serverless Functions
+2. Update `VITE_API_BASE` and `VITE_BACKEND_URL` environment variables in Vercel to point to your backend URL
+
+---
+
+**Note**: The `vercel.json` file is already configured for optimal Vercel deployment. All routes will be properly handled for client-side routing.
+
