@@ -2,6 +2,7 @@ import React, { ReactNode } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { motion } from 'framer-motion'
 import { Loader2, Shield } from 'lucide-react'
+import { isSupabaseConfigured } from '@/lib/supabaseClient'
 
 interface AuthGuardProps {
   children: ReactNode
@@ -11,8 +12,8 @@ interface AuthGuardProps {
 export function AuthGuard({ children, fallback }: AuthGuardProps) {
   const { currentUser, loading } = useAuth()
   
-  // DEMO MODE: Allow access without login
-  const DEMO_MODE = true // Set to false in production
+  // Allow unauthenticated access only when Supabase is not wired (demo/local)
+  const DEMO_MODE = !isSupabaseConfigured
 
   // Show loading spinner while checking authentication
   if (loading && !DEMO_MODE) {

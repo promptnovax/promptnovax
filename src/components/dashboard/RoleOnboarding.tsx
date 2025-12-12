@@ -17,6 +17,7 @@ import {
   CheckCircle
 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
+import { useToast } from "@/hooks/use-toast"
 
 const STORAGE_KEY = "pnx_user_role"
 const ONBOARD_DONE_KEY = 'pnx_onboarding_done'
@@ -29,17 +30,28 @@ export function RoleOnboarding({ onComplete }: { onComplete: (role: Role) => voi
   const [interests, setInterests] = useState<string[]>([])
   const [displayName, setDisplayName] = useState<string>("")
   const [notificationsOptIn, setNotificationsOptIn] = useState<boolean>(true)
-  const { currentUser } = useAuth()
+  const [submitting, setSubmitting] = useState(false)
+  const { currentUser, userRole, updateRole } = useAuth()
+  const { success, error } = useToast()
 
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw === "seller" || raw === "buyer") {
+    const onboardingDone = localStorage.getItem(ONBOARD_DONE_KEY) === '1'
+
+    // If onboarding already completed, go straight to dashboard
+    if (onboardingDone && raw && (raw === 'seller' || raw === 'buyer')) {
       onComplete(raw as Role)
-    } else if (raw === "both") {
-      // legacy value – default to seller for backwards compatibility
-      onComplete("seller")
+      return
     }
-  }, [onComplete])
+
+    // Prefer server role when available
+    if (userRole?.role === 'seller' || userRole?.role === 'buyer') {
+      setSelected(userRole.role as Role)
+      if (onboardingDone) {
+        onComplete(userRole.role as Role)
+      }
+    }
+  }, [onComplete, userRole])
 
   const choose = (role: Role) => {
     setSelected(role)
@@ -60,11 +72,27 @@ export function RoleOnboarding({ onComplete }: { onComplete: (role: Role) => voi
     // step 3 => finalize
     if (!selected) return
 
-    // Persist locally for routing robustness
-    localStorage.setItem(STORAGE_KEY, selected)
-    localStorage.setItem(ONBOARD_DONE_KEY, '1')
+    setSubmitting(true)
+    try {
+      const fallbackName =
+        displayName ||
+        currentUser?.displayName ||
+        currentUser?.email?.split("@")[0] ||
+        ""
 
-    onComplete(selected)
+      await updateRole(selected, fallbackName)
+
+      // Persist locally for routing robustness
+      localStorage.setItem(STORAGE_KEY, selected)
+      localStorage.setItem(ONBOARD_DONE_KEY, '1')
+
+      success("Profile updated", `You're set up as a ${selected}.`)
+      onComplete(selected)
+    } catch (e: any) {
+      error("Could not finish onboarding", e?.message || "Please try again")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const interestOptions = [
@@ -193,8 +221,8 @@ export function RoleOnboarding({ onComplete }: { onComplete: (role: Role) => voi
             Back
           </Button>
         )}
-        <Button onClick={continueNext} disabled={step === 1 && !selected}>
-          {step < 3 ? 'Continue' : 'Finish'} <ArrowRight className="h-4 w-4 ml-2" />
+        <Button onClick={continueNext} disabled={(step === 1 && !selected) || submitting}>
+          {step < 3 ? 'Continue' : submitting ? 'Saving...' : 'Finish'} <ArrowRight className="h-4 w-4 ml-2" />
         </Button>
       </div>
     </div>

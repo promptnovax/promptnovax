@@ -31,6 +31,7 @@ interface AuthContextType {
   ) => Promise<void>
   logout: () => Promise<void>
   loginWithGoogle: () => Promise<void>
+  updateRole: (role: UserRoleType, displayName?: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -212,6 +213,45 @@ export function AuthProvider({ children }: AuthProviderProps) {
     )
   }
 
+  const updateRole = async (role: UserRoleType, displayName?: string) => {
+    if (!currentUser) {
+      throw new Error('No authenticated user to update role')
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      const updatedUser: AuthUser = {
+        ...currentUser,
+        role,
+        displayName: displayName || currentUser.displayName
+      }
+      setCurrentUser(updatedUser)
+      setUserRole({ role, createdAt: updatedUser.createdAt || null })
+      persistDemoUser(updatedUser)
+      return
+    }
+
+    const response = await postJson<AuthApiResponse>('/api/auth/update-role', {
+      userId: currentUser.uid,
+      role,
+      displayName
+    })
+
+    if (!response.user) {
+      throw new Error(response.message || 'Failed to update role')
+    }
+
+    const mappedUser = mapBackendUser(response.user)
+    setCurrentUser(mappedUser)
+    setUserRole(
+      mappedUser
+        ? {
+            role: (mappedUser.role as UserRoleType) || role,
+            createdAt: mappedUser.createdAt || null
+          }
+        : null
+    )
+  }
+
   const login = async (email: string, password: string) => {
     if (!isSupabaseConfigured || !supabase) {
       const demoUser = createDemoUser(email)
@@ -341,7 +381,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     login,
     signup,
     logout,
-    loginWithGoogle
+    loginWithGoogle,
+    updateRole
   }), [currentUser, userRole, loading])
 
   return (

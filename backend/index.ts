@@ -285,6 +285,7 @@ type AuthEventType =
   | 'password_reset_request'
   | 'password_reset'
   | 'token_refresh'
+  | 'role_update'
 
 type AuthUserRole = 'buyer' | 'seller'
 
@@ -573,6 +574,60 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (error: any) {
     console.error('[Auth] login failed', error)
     res.status(500).json({ error: 'Failed to login' })
+  }
+})
+
+app.post('/api/auth/update-role', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'Supabase not configured on server' })
+  }
+
+  try {
+    const { userId, role, displayName } = req.body as {
+      userId?: string
+      role?: AuthUserRole
+      displayName?: string
+    }
+
+    if (!userId || !role) {
+      return res.status(400).json({ error: 'userId and role are required' })
+    }
+
+    const normalizedRole = normalizeRole(role)
+
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: {
+        role: normalizedRole,
+        display_name: displayName
+      }
+    })
+
+    if (error || !data?.user) {
+      await logAuthEvent({
+        eventType: 'role_update',
+        request: req,
+        success: false,
+        userId,
+        errorCode: error?.message,
+        metadata: { role: normalizedRole }
+      })
+      return res.status(400).json({ error: error?.message || 'Failed to update role' })
+    }
+
+    await upsertProfileFromUser(data.user, normalizedRole, displayName)
+
+    await logAuthEvent({
+      eventType: 'role_update',
+      request: req,
+      success: true,
+      userId,
+      metadata: { role: normalizedRole }
+    })
+
+    res.json({ user: mapAuthUser(data.user) })
+  } catch (error: any) {
+    console.error('[Auth] update-role failed', error)
+    res.status(500).json({ error: 'Failed to update role' })
   }
 })
 
