@@ -1,0 +1,10 @@
+{
+  "name": "github-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for GitHub operations",
+  "author": "PNX SaaS",
+  "port": 9001,
+  "runtime": "python",
+  "entrypoint": "server.py"
+}
+

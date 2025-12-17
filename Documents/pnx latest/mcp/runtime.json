@@ -1,0 +1,89 @@
+{
+  "mcpServers": {
+    "github-mcp": {
+      "command": "python",
+      "args": ["mcp/github-mcp/server.py"],
+      "env": {
+        "GITHUB_TOKEN": "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"
+      }
+    },
+    "filesystem-mcp": {
+      "command": "python",
+      "args": ["mcp/filesystem-mcp/server.py"],
+      "env": {
+        "FILESYSTEM_BASE_DIR": ""
+      }
+    },
+    "browser-automation-mcp": {
+      "command": "python",
+      "args": ["mcp/browser-automation-mcp/server.py"],
+      "env": {}
+    },
+    "stripe-billing-mcp": {
+      "command": "python",
+      "args": ["mcp/stripe-billing-mcp/server.py"],
+      "env": {
+        "STRIPE_API_KEY": ""
+      }
+    },
+    "multi-model-mcp": {
+      "command": "python",
+      "args": ["mcp/multi-model-mcp/server.py"],
+      "env": {
+        "OPENAI_API_KEY": "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",
+        "GEMINI_API_KEY": "AIzaSyDjr85xTyIaa-ewdjxH1YI7-Tfw1OJyLss"
+      }
+    },
+    "python-runner-mcp": {
+      "command": "python",
+      "args": ["mcp/python-runner-mcp/server.py"],
+      "env": {}
+    },
+    "scraper-mcp": {
+      "command": "python",
+      "args": ["mcp/scraper-mcp/server.py"],
+      "env": {}
+    },
+    "prompt-execution-mcp": {
+      "command": "python",
+      "args": ["mcp/prompt-execution-mcp/server.py"],
+      "env": {}
+    },
+    "vector-search-mcp": {
+      "command": "python",
+      "args": ["mcp/vector-search-mcp/server.py"],
+      "env": {}
+    },
+    "api-multiplexer-mcp": {
+      "command": "python",
+      "args": ["mcp/api-multiplexer-mcp/server.py"],
+      "env": {
+        "OPENAI_API_KEY": "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",
+        "GEMINI_API_KEY": "AIzaSyDjr85xTyIaa-ewdjxH1YI7-Tfw1OJyLss",
+        "ANTHROPIC_API_KEY": ""
+      }
+    },
+    "analytics-mcp": {
+      "command": "python",
+      "args": ["mcp/analytics-mcp/server.py"],
+      "env": {}
+    },
+    "webhook-mcp": {
+      "command": "python",
+      "args": ["mcp/webhook-mcp/server.py"],
+      "env": {}
+    },
+    "background-jobs-mcp": {
+      "command": "python",
+      "args": ["mcp/background-jobs-mcp/server.py"],
+      "env": {}
+    },
+    "database-mcp": {
+      "command": "python",
+      "args": ["mcp/database-mcp/server.py"],
+      "env": {
+        "DATABASE_URL": ""
+      }
+    }
+  }
+}
