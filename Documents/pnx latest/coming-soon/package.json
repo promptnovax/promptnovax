@@ -1,0 +1,13 @@
+{
+  "name": "pnx-coming-soon",
+  "version": "1.0.0",
+  "description": "PNX Coming Soon Landing Page",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'Static site - no build needed'",
+    "start": "echo 'Static site - serve with any static server'"
+  },
+  "keywords": ["coming-soon", "landing-page", "pnx"],
+  "author": "PNX Team",
+  "license": "MIT"
+}
