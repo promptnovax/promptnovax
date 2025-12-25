@@ -134,20 +134,49 @@ function getSupabaseConfig() {
     };
 }
 
-// Submit email function - Serverless API Integration
+// Submit email function - Supabase Integration
 async function submitEmail(email) {
+    // Get configuration
+    const config = getSupabaseConfig();
+    const SUPABASE_URL = config.url;
+    const SUPABASE_ANON_KEY = config.anonKey;
+
+    // Validate configuration
+    if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.trim() === '' || SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY_HERE') {
+        throw new Error('Service configuration error. Please contact support.');
+    }
+
+    if (!SUPABASE_URL || !SUPABASE_URL.includes('supabase.co')) {
+        throw new Error('Service configuration error. Please contact support.');
+    }
+
     try {
-        // Show loading state/console in dev
         if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            console.log('Submitting email to API...');
+            console.log('Submitting email to waitlist...');
         }
 
-        const response = await fetch('/api/subscribe', {
+        const requestBody = {
+            email: email.toLowerCase().trim()
+        };
+
+        // Add optional fields
+        const ip = await getClientIP().catch(() => null);
+        if (ip) requestBody.ip_address = ip;
+        if (navigator.userAgent) requestBody.user_agent = navigator.userAgent;
+
+        const cleanUrl = SUPABASE_URL.replace(/\/$/, '');
+        const apiUrl = `${cleanUrl}/rest/v1/waitlist`;
+        const cleanAnonKey = SUPABASE_ANON_KEY.trim();
+
+        const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'apikey': cleanAnonKey,
+                'Authorization': `Bearer ${cleanAnonKey}`,
+                'Prefer': 'return=representation'
             },
-            body: JSON.stringify({ email }),
+            body: JSON.stringify(requestBody),
         });
 
         if (response.status === 409) {
@@ -159,7 +188,12 @@ async function submitEmail(email) {
         }
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
+            let errorData = {};
+            try {
+                errorData = await response.json();
+            } catch (e) {
+                errorData = { message: response.statusText };
+            }
             throw new Error(errorData.message || 'Something went wrong. Please try again.');
         }
 
@@ -168,11 +202,11 @@ async function submitEmail(email) {
             success: true,
             already_registered: false,
             message: 'Successfully added to waitlist',
-            data: data
+            data: data[0] || data
         };
 
     } catch (error) {
-        console.error('Submission error:', error);
+        console.error('Error:', error);
         throw error;
     }
 }
