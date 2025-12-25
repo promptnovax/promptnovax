@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "echo 'Static site - no build needed'",
-    "start": "echo 'Static site - serve with any static server'",
-    "postinstall": "prisma generate"
+    "start": "echo 'Static site - serve with any static server'"
   },
   "keywords": [
     "coming-soon",
@@ -15,8 +14,5 @@
   ],
   "author": "PNX Team",
   "license": "MIT",
-  "dependencies": {
-    "@prisma/client": "^5.10.0",
-    "prisma": "^5.10.0"
-  }
+  "dependencies": {}
 }
