@@ -1,0 +1,10 @@
+{
+  "name": "vector-search-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for vector search, embeddings, and memory",
+  "author": "PNX SaaS",
+  "port": 9009,
+  "runtime": "python",
+  "entrypoint": "server.py"
+}
+

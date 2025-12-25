@@ -1,0 +1,10 @@
+{
+  "name": "webhook-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for webhook management",
+  "author": "PNX SaaS",
+  "port": 9012,
+  "runtime": "python",
+  "entrypoint": "server.py"
+}
+

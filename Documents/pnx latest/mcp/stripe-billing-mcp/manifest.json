@@ -1,0 +1,10 @@
+{
+  "name": "stripe-billing-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Stripe billing operations",
+  "author": "PNX SaaS",
+  "port": 9004,
+  "runtime": "python",
+  "entrypoint": "server.py"
+}
+

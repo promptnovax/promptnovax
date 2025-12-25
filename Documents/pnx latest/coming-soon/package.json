@@ -5,9 +5,18 @@
   "type": "module",
   "scripts": {
     "build": "echo 'Static site - no build needed'",
-    "start": "echo 'Static site - serve with any static server'"
+    "start": "echo 'Static site - serve with any static server'",
+    "postinstall": "prisma generate"
   },
-  "keywords": ["coming-soon", "landing-page", "pnx"],
+  "keywords": [
+    "coming-soon",
+    "landing-page",
+    "pnx"
+  ],
   "author": "PNX Team",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/client": "^5.10.0",
+    "prisma": "^5.10.0"
+  }
 }

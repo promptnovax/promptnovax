@@ -1,0 +1,10 @@
+{
+  "name": "filesystem-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for local file system operations",
+  "author": "PNX SaaS",
+  "port": 9002,
+  "runtime": "python",
+  "entrypoint": "server.py"
+}
+

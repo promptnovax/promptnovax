@@ -29,11 +29,9 @@ body {
 
 .container {
     position: relative;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
+    width: 100%;
+    /* Removed min-height and centering to allow natural flow */
+    padding: 0;
     isolation: isolate;
 }
 
@@ -85,12 +83,16 @@ body {
 }
 
 @keyframes float {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translate(0, 0) scale(1);
     }
+
     33% {
         transform: translate(30px, -30px) scale(1.1);
     }
+
     66% {
         transform: translate(-20px, 20px) scale(0.9);
     }
@@ -102,9 +104,12 @@ body {
     z-index: 1;
     max-width: 1200px;
     width: 100%;
+    margin: 0 auto;
+    /* Center the wrapper */
     text-align: center;
     animation: fadeInUp 1s ease-out;
-    padding: 2rem 0;
+    padding: 0;
+    /* Remove top/bottom padding that adds to height */
 }
 
 @keyframes fadeInUp {
@@ -112,6 +117,7 @@ body {
         opacity: 0;
         transform: translateY(30px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -131,14 +137,15 @@ body {
     height: 120px;
     width: auto;
     object-fit: contain;
-    filter: drop-shadow(0 8px 30px rgba(102, 126, 234, 0.5));
+    filter: drop-shadow(0 0 20px rgba(102, 126, 234, 0.3));
     max-width: 250px;
-    transition: filter 0.3s ease;
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
 }
 
 .logo-image:hover {
-    filter: drop-shadow(0 12px 40px rgba(102, 126, 234, 0.7));
+    filter: drop-shadow(0 0 30px rgba(102, 126, 234, 0.6));
+    transform: scale(1.02);
 }
 
 .logo-wrapper {
@@ -156,10 +163,13 @@ body {
 }
 
 @keyframes pulse {
-    0%, 100% {
+
+    0%,
+    100% {
         opacity: 1;
         transform: scale(1);
     }
+
     50% {
         opacity: 0.8;
         transform: scale(1.05);
@@ -173,7 +183,7 @@ body {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.04em;
 }
 
 .highlight-text {
@@ -185,11 +195,12 @@ body {
 
 /* Main Heading */
 .main-heading {
-    font-size: clamp(2.5rem, 5vw, 4rem);
-    font-weight: 800;
-    line-height: 1.2;
-    margin-bottom: 1.5rem;
-    letter-spacing: -0.03em;
+    font-size: clamp(3rem, 6vw, 5rem);
+    font-weight: 900;
+    line-height: 1.1;
+    margin-bottom: 2rem;
+    letter-spacing: -0.04em;
+    text-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
 }
 
 .gradient-text {
@@ -354,7 +365,11 @@ body {
     display: flex;
     justify-content: center;
     gap: 1.5rem;
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
+    margin-top: 2.5rem;
+    /* Reduced to pull footer up */
+    position: relative;
+    z-index: 20;
 }
 
 .social-link {
@@ -453,9 +468,13 @@ body {
 
 .form-privacy {
     margin-top: 1rem;
-    font-size: 0.75rem;
-    color: var(--text-muted);
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+    /* Brighter for visibility */
     text-align: center;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+    /* Shadow for readability against video */
+    font-weight: 500;
 }
 
 /* Countdown Timer */
@@ -487,19 +506,22 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    min-width: 90px;
-    padding: 1rem;
-    background: var(--bg-card);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
+    min-width: 100px;
+    padding: 1.5rem 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 18px;
     transition: all 0.3s ease;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
 .countdown-item:hover {
     transform: translateY(-5px);
-    border-color: rgba(102, 126, 234, 0.4);
-    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.15);
 }
 
 .countdown-number {
@@ -539,10 +561,13 @@ body {
 
 
 @keyframes countdownPulse {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(1);
         opacity: 1;
     }
+
     50% {
         transform: scale(1.03);
         opacity: 0.95;
@@ -550,9 +575,12 @@ body {
 }
 
 @keyframes blink {
-    0%, 100% {
+
+    0%,
+    100% {
         opacity: 0.5;
     }
+
     50% {
         opacity: 1;
     }
@@ -659,6 +687,7 @@ body {
     from {
         opacity: 0;
     }
+
     to {
         opacity: 1;
     }
@@ -669,6 +698,7 @@ body {
         opacity: 0;
         transform: scale(0.8) translateY(20px);
     }
+
     to {
         opacity: 1;
         transform: scale(1) translateY(0);
@@ -676,9 +706,12 @@ body {
 }
 
 @keyframes bounce {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translateY(0);
     }
+
     50% {
         transform: translateY(-20px);
     }
@@ -686,8 +719,10 @@ body {
 
 /* Footer */
 .footer-text {
-    font-size: 0.875rem;
+    font-size: 0.85rem;
     color: var(--text-muted);
+    margin: 0;
+    padding: 0;
 }
 
 /* Responsive Design */
@@ -787,7 +822,9 @@ body {
         justify-content: center;
     }
 
-    .orb-1, .orb-2, .orb-3 {
+    .orb-1,
+    .orb-2,
+    .orb-3 {
         width: 300px;
         height: 300px;
     }
@@ -1189,42 +1226,93 @@ section {
     font-weight: 700;
 }
 
-/* Vision Section */
+/* Vision Section - Sticky Effect */
 .vision-section {
     text-align: center;
-    padding: 3rem 2rem;
-    background: var(--bg-card);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--border-color);
-    border-radius: 24px;
+    padding: 10vh 2rem;
+    background: transparent;
+    /* Transparent back so we see global bg, but stickiness works */
+    min-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    position: sticky;
+    top: 5vh;
+    z-index: 0;
+    /* Behind the next section */
+    opacity: 1;
+    transition: opacity 0.5s;
 }
 
 .vision-text {
-    font-size: clamp(1.125rem, 2.5vw, 1.5rem);
+    font-size: clamp(1.25rem, 3vw, 2rem);
     color: var(--text-secondary);
-    line-height: 1.8;
+    line-height: 1.6;
     max-width: 800px;
     margin: 0 auto;
+    text-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
 .vision-text strong {
     color: var(--text-primary);
-    font-weight: 700;
+    font-weight: 800;
     background: var(--primary-gradient);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    display: block;
+    margin: 1rem 0;
+    font-size: 1.2em;
 }
 
-/* Early Access Section */
+/* Early Access Section - Curtain Reveal */
 .early-access-section {
+    position: relative;
+    z-index: 10;
     text-align: center;
-    padding: 3rem 2rem;
-    background: var(--bg-card);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--border-color);
-    border-radius: 24px;
-    margin-bottom: 4rem;
+    padding: 8rem 2rem 0;
+    /* Reduced bottom padding significantly */
+    background: #000;
+    overflow: hidden;
+    margin-bottom: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.8);
+}
+
+/* Video Background Styles */
+.video-bg-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.section-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0.8;
+    /* Increased visibility */
+}
+
+.video-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle, rgba(0, 0, 0, 0.1) 0%, rgba(5, 5, 8, 0.8) 90%);
+    z-index: 1;
+}
+
+.early-access-content {
+    position: relative;
+    z-index: 2;
+    /* Above video */
 }
 
 .early-access-text {
@@ -1232,5 +1320,5 @@ section {
     color: var(--text-secondary);
     margin-bottom: 2.5rem;
     line-height: 1.6;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
 }
-

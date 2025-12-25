@@ -1,0 +1,10 @@
+{
+  "name": "browser-automation-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for browser automation using Playwright",
+  "author": "PNX SaaS",
+  "port": 9003,
+  "runtime": "python",
+  "entrypoint": "server.py"
+}
+
